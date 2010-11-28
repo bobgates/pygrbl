@@ -1,0 +1,10 @@
+PyGrbl - a python interface for grbl that will hopefully one day provide EMC2-like functionality. Written using PyQt, under OS X. Also needs PyQGLViewer.
+
+At the moment, there are just test and stub programs:
+- pygrbl is the main program
+- gc_parser parses the g-code files and puts the parsed result in an OpenGL window
+- grblserial provides the interface to my version of grbl, see elsewhere on github.
+
+At present, grblserial is a command line sequencer for g-code that is written to be 'just right' - in other words, it isn't very robust about g-codes that grbl can't understand.
+
+The code is very rough and ready, but take a look, and get in touch if you're interested...
