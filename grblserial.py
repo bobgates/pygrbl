@@ -8,19 +8,34 @@ import serial
 import time
 import sys
 from PyQt4.QtCore import * #QTimer, QObject
+import copy
 
 
-class grblStatusT:
-    x = 0.0;
-    y = 0.0;
-    z = 0.0;
-    lineNumber = 0;
-    bufferReady = False;
-    machineRunning = False;
-    autoMode = False;
+class grblStatusT(object):
+    def __init__(self):
+        super(grblStatusT, self).__init__()
+        self.x = 0.0;
+        self.y = 0.0;
+        self.z = 0.0;
+        self.lineNumber = 0;
+        self.bufferReady = False;
+        self.machineRunning = False;
+        self.autoMode = False;
+
+    def __eq__(self, other):
+        #print 'In test'
+        #print
+        #print self.__dict__
+        #print other.__dict__
+        if type(other) is type(self):
+            return self.__dict__ == other.__dict__
+        return False
+    
+#     def __ne__(self, other):
+#         return not self.__eq__(other)
 
 
-class grblSerial:
+class grblSerial(QObject):
     ''' Class that provides queue acccess to grbl
     
     Is initialized with a default serial port, but
@@ -46,16 +61,19 @@ class grblSerial:
         '''Initialize grblSerial object with default 
            serial port ID and set up object variables.
         '''
+        super(grblSerial, self).__init__()
+        #QObject.__init__(self)
         self.portname = '/dev/tty.usbserial-A700dXL8'
         self.ser = self.openSerial(self.portname)
         self.commandQueue = []
         self.line_number=-1
-        self.status = grblStatusT
-        self.timerInterval = 20		# milliseconds
+        self.status = grblStatusT()
+        self.timerInterval = 20     # milliseconds
         self.timer = QTimer() 
-        QObject.connect(self.timer, SIGNAL("timeout()"), self.tick) 
+        self.connect(self.timer, SIGNAL("timeout()"), self.tick) 
         self.timer.start(self.timerInterval);
         
+      
     def openSerial(self, portname):
         '''Open serial port. This should reset grbl,
         which is checked for. If a grbl isn't found
@@ -90,14 +108,40 @@ class grblSerial:
     def updateStatus(self):
         '''Send a status query to grbl and update the
         status variable.
-        '''    
+        
+        Emits a signal if the status has changed in any
+        way.
+        '''   
+        
+        status = copy.copy(self.status)
+        #print 'About to test'
+        #print self.status.__dict__
+        #print self.status.__dict__['y']
+        
         self.send('eq\n')
         line = self.ser.readline()
         if not ('EQ' in line):
             raise Exception("EQ command failed")
         line = self.ser.readline()
         self.status = self.parseStatus(line)
-
+        # x = 0.0;
+#         self.y = 0.0;
+#         self.z = 0.0;
+#         self.lineNumber = 0;
+#         self.bufferReady = False;
+#         self.machineRunning = False;
+#         self.autoMode = False;
+#        print status.x, status.y, status.z, status.lineNumber, \
+#              status.bufferReady, status.machineRunning, status.autoMode
+#        print self.status.x, self.status.y, self.status.z, self.status.lineNumber, \
+#              self.status.bufferReady, self.status.machineRunning, self.status.autoMode
+        #print self.status.y
+        #if status.y != self.status.y:
+        #    print '********************** different'
+        if status!=self.status:
+#            print "Emitting signal"
+            self.emit(SIGNAL("statusChanged"), self.status)
+            
     def parseStatus(self, line):
         '''Takes a line response from grbl to an 'eq' command,
         which is in the form: ORN0X0Y0Z0, and fills a grblStatusT
@@ -153,7 +197,9 @@ class grblSerial:
             return 0
             raise Exception('Response to command:_'+command+'_ not okay: '+line)
         return 1
-        
+      
+    def emergencyStop(self):
+        self.sendCommand('ES\n')
         
     def tick(self):
         '''Timer update: checks if anything is in the
@@ -161,9 +207,10 @@ class grblSerial:
         either the queue is empty or grbl isn't accepting
         any further commands because its buffer is full.
         '''
+        #print "in tick"
         self.updateStatus()
         if len(self.commandQueue)>0:
-            while self.status.bufferReady:
+            while (self.status.bufferReady) and (len(self.commandQueue)>0):
                 command = self.commandQueue.pop(0)
                 #print command
                 
@@ -179,7 +226,8 @@ class grblSerial:
                 if runCommand:
                     print '\nSending: ',command
                     if  not self.sendCommand(command):
-                        self.commandQueue.insert(0, command)
+                        pass
+                        #self.commandQueue.insert(0, command)
                 self.updateStatus()
                         
                         

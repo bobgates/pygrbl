@@ -431,14 +431,27 @@ class gcViewer(QGLViewer):
         self.center = 0.0
         self.radius = 0.0
         self.selected = -1.0
+        self.position = [0.0, 0.0, 0.0]
         
         self.orig= Vec()
         self.dir= Vec()
         self.selectedPoint = Vec()
+        
+        self.coordFont = QFont()
+        self.coordFont.setPointSize(36)
 
         #self.goIsoView()
         #self.setAxisIsDrawn(True)
         #self.setGridIsDrawn(True)
+        
+        
+    def setPosition(self, status):
+        #print "in setPosition, y=",status.y
+        self.position[0]=status.x
+        self.position[1]=status.y
+        self.position[2]=status.z
+        self.draw()
+        self.updateGL()
         
     def setGLList(self, drawing_data):
         self.drawing = drawing_data
@@ -532,10 +545,21 @@ class gcViewer(QGLViewer):
         self.camera().showEntireScene()
 
         self.draw()
+        self.updateGL()
        
     def draw(self):
         if self.drawing:
             draw_gl_list(self.drawing, self.selected, False)
+        ogl.glColor3f(0.2, 0.2, 0.2)
+        self.drawText(10, 40, 
+                      'X: %.2f' % self.position[0], 
+                      self.coordFont)
+        self.drawText(10, 80, 
+                      'Y: %.2f' % self.position[1], 
+                      self.coordFont)
+        self.drawText(10, 120, 
+                      'Z: %.2f' % self.position[2], 
+                      self.coordFont)
         #QMessageBox.information(self, "In draw","In draw routine")
         #print self.camera().upVector()
 
@@ -587,6 +611,9 @@ def main():
     viewer.setGLList(parse_file(a))
     viewer.goIsoView()
     viewer.setWindowTitle("qglViewer")
+    
+    
+    #viewer.setPosition(4.324, 5.168, 2.003)
     viewer.show()
     qapp.exec_()
 

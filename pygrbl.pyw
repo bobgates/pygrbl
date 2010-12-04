@@ -18,7 +18,7 @@ from PyQt4.QtGui import *
 #import newimagedlg
 
 import qrc_resources
-
+import grblserial
 import gc_parser
 
 
@@ -30,7 +30,6 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-
 # Create the right hand widget, give it a layout
 # and put the viewer and the geometry/view controls into it.
         rwidget = QWidget()
@@ -47,6 +46,10 @@ class MainWindow(QMainWindow):
         self.gcViewer.goTopView()
         self.gcViewer.setMinimumSize(300, 300)
         self.gcViewer.setContextMenuPolicy(Qt.ActionsContextMenu)
+        
+        self.grbl = grblserial.grblSerial()
+        self.connect(self.grbl, SIGNAL('statusChanged'), 
+                      self.gcViewer.setPosition)
         
         viewTopAction = self.createAction("&Top", self.viewTop,
                  None, None,
@@ -75,7 +78,7 @@ class MainWindow(QMainWindow):
         self.codeEntryPage=QWidget()
         self.cepLayout = QVBoxLayout(self.codeEntryPage)
         historyLabel = QLabel("History:")
-        self.historyText = QTextBrowser()
+        self.historyText = QTextEdit()
         self.cepLayout.addWidget(historyLabel)
         self.cepLayout.addWidget(self.historyText)
         
@@ -194,10 +197,6 @@ class MainWindow(QMainWindow):
         
         self.sizeLabel.setText('Label')
    
-   
-   
-   
-        
         
 # 
 #         fileNewAction = self.createAction("&New...", self.fileNew,
@@ -223,6 +222,12 @@ class MainWindow(QMainWindow):
         fileMenu = self.menuBar().addMenu("&File")
         self.addActions(fileMenu, (fileOpenAction, fileSaveAction, 
                                    None, fileSaveAsAction, fileQuitAction))
+
+        emergencyStopAction = self.createAction("&Stop", 
+                self.emergencyStop,
+                 "Ctrl+X", "process-stop-2", "Stop the machine")
+
+
                                    
 #        fileMenu.addSeparator()
 #        fileMenu.addAction(fileQuitAction)
@@ -295,6 +300,9 @@ class MainWindow(QMainWindow):
         fileToolbar.addAction(viewFrontAction)
         fileToolbar.addAction(viewIsoAction)
         
+        fileToolbar.addSeparator()
+        fileToolbar.addAction(emergencyStopAction)
+        
 
         
          #fileNewAction, 
@@ -340,6 +348,11 @@ class MainWindow(QMainWindow):
 #         QTimer.singleShot(0, self.loadInitialFile)
 # 
 # 
+
+    def updateStatus(self, status):
+        QMessageBox.about(self, "Sending line", str(self.commandLine.text()))
+        self.historyText.add
+
      
     def playPause(self):
         if self.play:
@@ -377,6 +390,9 @@ class MainWindow(QMainWindow):
     def viewIso(self):
         self.gcViewer.goIsoView()
         self.gcViewer.updateGL()
+        
+    def emergencyStop(self):
+        self.grbl.emergencyStop()
 
 
     def createAction(self, text, slot=None, shortcut=None, icon=None,
@@ -413,8 +429,10 @@ class MainWindow(QMainWindow):
  
  
     def goOneLine(self):
-        QMessageBox.about(self, "Sending line", self.commandLine.text())
-        
+        #QMessageBox.about(self, "Sending line", self.commandLine.text())
+        self.grbl.addCommand(str(self.commandLine.text()))
+        self.historyText.append(self.commandLine.text())
+        self.commandLine.setText('')
     
 # 
 #     def closeEvent(self, event):
