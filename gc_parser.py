@@ -302,6 +302,51 @@ def parse_file(file):
     return gl_list          
         
 #-------------------------------------------------------------------------------------------                
+
+def draw_position(pos):
+    NO_SEGS=20
+    DIAMETER=4.0
+    CONE_HEIGHT=4.0
+    CYLINDER_HEIGHT=6.0
+    #ogl.glPolygonMode(GL_FRONT, GL_FILL);
+    #ogl.glPolygonMode(GL_BACK, GL_LINE);
+    
+    for i in range(NO_SEGS):
+        start_angle = float(i)/NO_SEGS*2*math.pi
+        stop_angle =  float(i+1)/NO_SEGS*2*math.pi
+        x0 = pos[0]
+        x1 = x0+DIAMETER/2*math.cos(start_angle)
+        x2 = x0+DIAMETER/2*math.cos(stop_angle)
+        y0 = pos[1]
+        y1 = y0+DIAMETER/2*math.sin(start_angle)
+        y2 = y0+DIAMETER/2*math.sin(stop_angle)
+        z0 = pos[2]
+        z1 = z0+CONE_HEIGHT
+        z2 = z0+CONE_HEIGHT
+        
+        ogl.glBegin(ogl.GL_TRIANGLES)    
+        ogl.glColor3f(0.9, 1.0, 0.9)
+        ogl.glVertex3f(x0, y0, z0)
+        ogl.glVertex3f(x1, y1, z1)
+        ogl.glVertex3f(x2, y2, z2)
+        ogl.glEnd()
+                
+        ogl.glBegin(ogl.GL_QUADS)    
+        ogl.glVertex3f(x1, y1, z1)
+        ogl.glVertex3f(x1, y1, z1+CYLINDER_HEIGHT)
+        ogl.glVertex3f(x2, y2, z2+CYLINDER_HEIGHT)
+        ogl.glVertex3f(x2, y2, z2)
+        ogl.glEnd()
+        
+        ogl.glBegin(ogl.GL_TRIANGLES)    
+        ogl.glVertex3f(x0, y0, z1+CYLINDER_HEIGHT)
+        ogl.glVertex3f(x1, y1, z1+CYLINDER_HEIGHT)
+        ogl.glVertex3f(x2, y2, z2+CYLINDER_HEIGHT)
+        ogl.glEnd()
+        
+        
+        
+#-------------------------------------------------------------------------------------------                
 def draw_gl_list(gl_list, selected=-1, pushNames=False):
 
     ogl.glClearColor(0.9, 0.9, 0.9, 0.0) 
@@ -550,6 +595,7 @@ class gcViewer(QGLViewer):
     def draw(self):
         if self.drawing:
             draw_gl_list(self.drawing, self.selected, False)
+            draw_position(self.position)
         ogl.glColor3f(0.2, 0.2, 0.2)
         self.drawText(10, 40, 
                       'X: %.2f' % self.position[0], 
@@ -560,6 +606,10 @@ class gcViewer(QGLViewer):
         self.drawText(10, 120, 
                       'Z: %.2f' % self.position[2], 
                       self.coordFont)
+                      
+                      
+                      
+                      
         #QMessageBox.information(self, "In draw","In draw routine")
         #print self.camera().upVector()
 
@@ -599,6 +649,12 @@ class gcViewer(QGLViewer):
             helpwidget.hide()
         QGLViewer.closeEvent(self,event)
 
+class temp():
+   x=0.0
+   y=0.0
+   z=0.0
+
+
 def main():
     qapp = QApplication([])
     viewer = gcViewer()
@@ -612,8 +668,12 @@ def main():
     viewer.goIsoView()
     viewer.setWindowTitle("qglViewer")
     
+    pos = temp()
+    pos.x = 4.3
+    pos.y=5.5
+    pos.z=-0.3
     
-    #viewer.setPosition(4.324, 5.168, 2.003)
+    viewer.setPosition(pos)
     viewer.show()
     qapp.exec_()
 

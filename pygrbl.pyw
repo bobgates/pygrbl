@@ -21,10 +21,7 @@ import qrc_resources
 import grblserial
 import gc_parser
 
-
 __version__ = "0.1.0"
-
-
 
 class MainWindow(QMainWindow):
 
@@ -36,6 +33,8 @@ class MainWindow(QMainWindow):
         rlayout = QVBoxLayout(rwidget)
         self.gcViewer = gc_parser.gcViewer()#twidget)
 
+
+        self.activeLine =-1
         self.filename = ''
         self.play=False
         file = open('cncweb.txt')
@@ -48,8 +47,7 @@ class MainWindow(QMainWindow):
         self.gcViewer.setContextMenuPolicy(Qt.ActionsContextMenu)
         
         self.grbl = grblserial.grblSerial()
-        self.connect(self.grbl, SIGNAL('statusChanged'), 
-                      self.gcViewer.setPosition)
+        self.connect(self.grbl, SIGNAL('statusChanged'), self.updateStatus)
         
         viewTopAction = self.createAction("&Top", self.viewTop,
                  None, None,
@@ -108,9 +106,11 @@ class MainWindow(QMainWindow):
         self.Tabs.insertTab(0,self.controlPage, "Manual Control (F3)")
 
 
-
+        font = QFont("Courier", 14)
+        font.setFixedPitch(True)
 #Bottom area that contains the text file:
-        self.editWidget = QTextEdit()
+        self.editor = QTextEdit()
+        self.editor.setFont(font)
         
 # Create the splitters that manage space of all
 # the sub places        
@@ -120,61 +120,8 @@ class MainWindow(QMainWindow):
         self.leftrightSplit.addWidget(rwidget)
         self.mainsplit = QSplitter(Qt.Vertical)
         self.mainsplit.addWidget(self.leftrightSplit)
-        self.mainsplit.addWidget(self.editWidget)
+        self.mainsplit.addWidget(self.editor)
         self.setCentralWidget(self.mainsplit)
-
-# Editor and controls
-
-#        self.editbar = QToolBar("EditTool")
-#        self.addToolBar(Qt.LeftToolBarArea, self.editbar)
-#        self.editbar.setObjectName("EditToolBar")
-        
-        
-#                 self.actionbar = QToolBar("Actions")
-#         self.addToolBar(Qt.BottomToolBarArea, self.actionbar)
-#         self.actionbar.setObjectName("ActionToolBar")
-#         self.actionbar.setAllowedAreas(Qt.BottomToolBarArea)
-#         self.actionbar.setFloatable(False)
-#         self.actionbar.setMovable(False)
-# 
-#        self.playpause = self.createButton('images/media-playback-start-2.png', 
-#                                           '', self.playPause)
-#         self.actionbar.addWidget(self.playpause)
-#         self.actionbar.addSeparator()
-#        self.backone = self.createButton('images/media-seek-backward-2.png','',self.decFrame)
-#         self.actionbar.addWidget(self.backone)
-# 
-# 
-#         self.frameslider = QSlider(Qt.Horizontal)
-#         self.frameslider.setRange(1,100)
-#         self.frameslider.setValue(50)
-#         self.frameslider.setFixedWidth(100)
-#         self.frameslider.setFixedHeight(32)
-#         self.actionbar.addWidget(self.frameslider)
-#         self.connect(self.frameslider, SIGNAL('valueChanged(int)'), self.setFrame)
-# 
-#        self.forwardone = self.createButton('images/media-seek-forward-2.png', '', self.incFrame)
-#         self.actionbar.addWidget(self.forwardone)
-
-#        self.editPage = QVBoxLayout()
-#        self.editPage.addWidget(self.editWidget)
-#        qtemp = QTabWidget()
-#        qtemp.addLayout(self.editPage) 
-        
-#         self.editbar.addWidget(self.editWidget)
-#         self.editbar.setAllowedAreas(Qt.LeftToolBarArea)
-#         self.editbar.setFloatable(False)
-#         self.editbar.setMovable(False)
-#         self.editbar.addWidget(self.playpause)
-#         self.editbar.addWidget(self.backone)
-#         self.editbar.addWidget(self.forwardone)
-
-
-
-
-
-
-
 
         self.printer = None
 
@@ -196,9 +143,6 @@ class MainWindow(QMainWindow):
         status.addPermanentWidget(self.progress)
         
         self.sizeLabel.setText('Label')
-   
-        
-# 
 #         fileNewAction = self.createAction("&New...", self.fileNew,
 #                 QKeySequence.New, "filenew", "Create an image file")
         fileOpenAction = self.createAction("&Open...", self.fileOpen,
@@ -215,58 +159,18 @@ class MainWindow(QMainWindow):
                 self.fileQuit,
                  "Ctrl+Q", "filequit", "Close the application")
         fileQuitAction.MenuRole = QAction.QuitRole
-#         editInvertAction = self.createAction("&Invert",
-#                 self.editInvert, "Ctrl+I", "editinvert",
-#                 "Invert the image's colors", True, "toggled(bool)")
-
         fileMenu = self.menuBar().addMenu("&File")
-        self.addActions(fileMenu, (fileOpenAction, fileSaveAction, 
-                                   None, fileSaveAsAction, fileQuitAction))
+        self.addActions(fileMenu, (fileOpenAction, fileSaveAction))#, 
+                                   #None, fileSaveAsAction, fileQuitAction))
 
         emergencyStopAction = self.createAction("&Stop", 
                 self.emergencyStop,
                  "Ctrl+X", "process-stop-2", "Stop the machine")
 
-
-                                   
-#        fileMenu.addSeparator()
-#        fileMenu.addAction(fileQuitAction)
-        
-        
-#                fileSaveAction, fileSaveAsAction, fileSaveAllAction,
-#                None, fileQuitAction))
-
-
-
-#    def addActions(self, target, actions):
-#        for action in actions:
-#            if action is None:
-#                target.addSeparator()
-#            else:
-#                target.addAction(action)
-
-
-#        self.fileMenu = self.menuBar().addMenu("&File")
-#        self.addActions = (fileMenu, (fileOpenAction, fileQuitAction))
-#                 fileSaveAction, fileSaveAsAction, None,
-#                 filePrintAction, fileQuitAction)
-
-#         self.fileMenuActions = (fileNewAction, fileOpenAction,
-#                 fileSaveAction, fileSaveAsAction, None,
-#                 filePrintAction, fileQuitAction)
-#         self.connect(self.fileMenu, SIGNAL("aboutToShow()"),
-#                      self.updateFileMenu)
-#         editMenu = self.menuBar().addMenu("&Edit")
-#         self.addActions(editMenu, (editInvertAction,
-#                 editSwapRedAndBlueAction, editZoomAction))
-#         mirrorMenu = editMenu.addMenu(QIcon(":/editmirror.png"),
-#                                       "&Mirror")
-#         self.addActions(mirrorMenu, (editUnMirrorAction,
-#                 editMirrorHorizontalAction, editMirrorVerticalAction))
-#         helpMenu = self.menuBar().addMenu("&Help")
-#         self.addActions(helpMenu, (helpAboutAction, helpHelpAction))
-# 
-
+        helpAboutAction = self.createAction("&About Image Changer",
+                self.helpAbout)
+        helpMenu = self.menuBar().addMenu("&Help")
+        self.addActions(helpMenu, (helpAboutAction,))#, helpHelpAction))
 
         self.runPlayPause = self.createAction("&PlayPause", self.playPause,
                  None, "media-playback-start-2", 
@@ -277,9 +181,6 @@ class MainWindow(QMainWindow):
         self.runForwardOne = self.createAction("&ForwardOne", self.incFrame,
                  None, "media-seek-forward-2", 
                  "Step forward one line")
-#    def createAction(self, text, slot=None, 
-#                     shortcut=None, icon=None,
-#                     tip=None, checkable=False, signal="triggered()"):
 
         fileToolbar = self.addToolBar("File")
         fileToolbar.setObjectName("FileToolBar")
@@ -304,54 +205,42 @@ class MainWindow(QMainWindow):
         fileToolbar.addAction(emergencyStopAction)
         
 
-        
-         #fileNewAction, 
-#                                       fileSaveAsAction))
-#         editToolbar = self.addToolBar("Edit")
-#         editToolbar.setObjectName("EditToolBar")
-#         self.addActions(editToolbar, (editInvertAction,
-#                 editSwapRedAndBlueAction, editUnMirrorAction,
-#                 editMirrorVerticalAction,
-#                 editMirrorHorizontalAction))
-#         self.zoomSpinBox = QSpinBox()
-#         self.zoomSpinBox.setRange(1, 400)
-#         self.zoomSpinBox.setSuffix(" %")
-#         self.zoomSpinBox.setValue(100)
-#         self.zoomSpinBox.setToolTip("Zoom the image")
-#         self.zoomSpinBox.setStatusTip(self.zoomSpinBox.toolTip())
-#         self.zoomSpinBox.setFocusPolicy(Qt.NoFocus)
-#         self.connect(self.zoomSpinBox,
-#                      SIGNAL("valueChanged(int)"), self.showImage)
-#         editToolbar.addWidget(self.zoomSpinBox)
-# 
-#         self.addActions(self.imageLabel, (editInvertAction,
-#                 editSwapRedAndBlueAction, editUnMirrorAction,
-#                 editMirrorVerticalAction, editMirrorHorizontalAction))
-# 
-#         self.resetableActions = ((editInvertAction, False),
-#                                  (editSwapRedAndBlueAction, False),
-#                                  (editUnMirrorAction, True))
-# 
-#         settings = QSettings()
-#         self.recentFiles = settings.value("RecentFiles").toStringList()
-#         size = settings.value("MainWindow/Size",
-#                               QVariant(QSize(600, 500))).toSize()
-#         self.resize(size)
-#         position = settings.value("MainWindow/Position",
-#                                   QVariant(QPoint(0, 0))).toPoint()
-#         self.move(position)
-#         self.restoreState(
-#                 settings.value("MainWindow/State").toByteArray())
-#         
-#         self.setWindowTitle("Image Changer")
-#         self.updateFileMenu()
-#         QTimer.singleShot(0, self.loadInitialFile)
-# 
-# 
-
     def updateStatus(self, status):
-        QMessageBox.about(self, "Sending line", str(self.commandLine.text()))
-        self.historyText.add
+        self.gcViewer.setPosition(status)
+        self.highlightLine(status.lineNumber)  #
+
+    def highlightLine(self, lineNumber):
+        '''Highlight the line in the text editor that has
+        the line number currently being executed. The line
+        number sent to grbl starts with 1, but corresponds
+        to line 0 in the text editor, hence the -1 in the 
+        calls that set the highlight.
+        
+        In QTextEdit, a block is the same as a \n delimited
+        line, as long as there are no images or tables in 
+        the document.
+        '''
+        if self.activeLine == lineNumber:
+            return
+        keywordFormat = QTextBlockFormat()
+
+        #un-highlight old block, if it wasn't zero:
+        if self.activeLine>0:
+            block = self.editor.document().findBlockByNumber(self.activeLine-1)  
+            #pos = block.position()  
+            cursor = QTextCursor(block)
+            keywordFormat.setBackground(Qt.white)
+            cursor.setBlockFormat(keywordFormat)
+
+        #highlight the new block, if it isn't zero:        
+        self.activeLine = lineNumber
+        if self.activeLine>0:
+            block = self.editor.document().findBlockByNumber(self.activeLine-1)  
+            #pos = block.position()  
+            cursor = QTextCursor(block)
+            keywordFormat.setBackground(Qt.yellow)
+            cursor.setBlockFormat(keywordFormat)
+            self.editor.setTextCursor(cursor)
 
      
     def playPause(self):
@@ -361,23 +250,25 @@ class MainWindow(QMainWindow):
             self.goPlay()
             
     def goPlay(self):
-#        if self.frame >= self.nframes:
-#            self.frame=0
         self.play = True
-#        self.playpause.setIcon(QIcon('images/media-playback-pause-2.png'))
         self.runPlayPause.setIcon(QIcon('images/media-playback-pause-2.png'))
-#        self.timer.start(self.framedelay)
-    
+       
+        block = self.editor.document().begin()
+        lineNumber = 1
+        while block.isValid(): 
+            self.grbl.addCommand(str(block.text()), lineNumber=lineNumber)
+            block = block.next()   
+            lineNumber+=1
+        
     def goPause(self):
         self.play = False;
+        self.emergencyStop() 
         self.runPlayPause.setIcon(QIcon('images/media-playback-start-2.png'))
-#        self.timer.stop()
 
     def decFrame(self):
         pass
     def incFrame(self):
         pass
-
 
     def viewTop(self):
         self.gcViewer.goTopView()
@@ -386,7 +277,7 @@ class MainWindow(QMainWindow):
     def viewFront(self):
         self.gcViewer.goFrontView()
         self.gcViewer.updateGL()
-    	
+        
     def viewIso(self):
         self.gcViewer.goIsoView()
         self.gcViewer.updateGL()
@@ -429,7 +320,6 @@ class MainWindow(QMainWindow):
  
  
     def goOneLine(self):
-        #QMessageBox.about(self, "Sending line", self.commandLine.text())
         self.grbl.addCommand(str(self.commandLine.text()))
         self.historyText.append(self.commandLine.text())
         self.commandLine.setText('')
@@ -563,15 +453,16 @@ class MainWindow(QMainWindow):
                 raise IOError, unicode(fh.errorString())
             stream = QTextStream(fh)
             stream.setCodec("UTF-8")
-            self.editWidget.clear()
-            self.editWidget.setLineWrapMode(QTextEdit.NoWrap)
+            self.editor.clear()
+            self.editor.setLineWrapMode(QTextEdit.NoWrap)
+            self.editor.document().setModified(False)
             
             
             infile = []
             while not stream.atEnd():
                 a=stream.readLine()
-            	self.editWidget.append(a)
-            	infile.append(a)
+                self.editor.append(a)
+                infile.append(a)
             self.gcViewer.setGLList(gc_parser.parse_file(infile))
 
             
@@ -745,16 +636,17 @@ class MainWindow(QMainWindow):
 #         self.imageLabel.setPixmap(QPixmap.fromImage(image))
 # 
 # 
-#     def helpAbout(self):
-#         QMessageBox.about(self, "About Image Changer",
-#                 """<b>Image Changer</b> v %s
-#                 <p>Copyright &copy; 2007 Qtrac Ltd. 
-#                 All rights reserved.
-#                 <p>This application can be used to perform
-#                 simple image manipulations.
-#                 <p>Python %s - Qt %s - PyQt %s on %s""" % (
-#                 __version__, platform.python_version(),
-#                 QT_VERSION_STR, PYQT_VERSION_STR, platform.system()))
+    def helpAbout(self):
+        QMessageBox.about(self, "About PyGrbl",
+                """<b>PyGrbl</b> v %s
+                <p>Copyright &copy; 2010 bobgates Ltd. 
+                All rights reserved.
+                <p>This application sequences g-code files for
+                the grbl application running on Arduino that runs
+                a CNC mill.
+                <p>Python %s - Qt %s - PyQt %s on %s""" % (
+                __version__, platform.python_version(),
+                QT_VERSION_STR, PYQT_VERSION_STR, platform.system()))
 # 
 # 
 #     def helpHelp(self):
@@ -765,7 +657,7 @@ class MainWindow(QMainWindow):
 def main():
     app = QApplication(sys.argv)
     app.setOrganizationName("TSC")
-    app.setOrganizationDomain("qtrac.eu")
+    app.setOrganizationDomain("github.com/bobgates")
     app.setApplicationName("G-code_sequencer_for_GRBL")
     app.setWindowIcon(QIcon(":/icon.png"))
     form = MainWindow()

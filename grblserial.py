@@ -14,13 +14,13 @@ import copy
 class grblStatusT(object):
     def __init__(self):
         super(grblStatusT, self).__init__()
-        self.x = 0.0;
-        self.y = 0.0;
-        self.z = 0.0;
-        self.lineNumber = 0;
-        self.bufferReady = False;
-        self.machineRunning = False;
-        self.autoMode = False;
+        self.x = 0.0
+        self.y = 0.0
+        self.z = 0.0
+        self.lineNumber = 0
+        self.bufferReady = False
+        self.machineRunning = False
+        self.autoMode = False
 
     def __eq__(self, other):
         #print 'In test'
@@ -121,6 +121,7 @@ class grblSerial(QObject):
         self.send('eq\n')
         line = self.ser.readline()
         if not ('EQ' in line):
+            return  # ie quietly ignore that EQ failed
             raise Exception("EQ command failed")
         line = self.ser.readline()
         self.status = self.parseStatus(line)
@@ -182,7 +183,9 @@ class grblSerial(QObject):
         return line
             
     def sendCommand(self, command):
+        
         command = self.stripWhitespace(command).upper()
+       
         self.send(command+'\n')
            
         line = self.ser.readline()
@@ -234,7 +237,24 @@ class grblSerial(QObject):
     def bufferEmpty(self):
         return len(self.commandQueue)==0
         
-    def addCommand(self, command):
+    def addCommand(self, command, lineNumber=-1):
+        '''Adds a g-code command to grbl's queue. If this is called
+        without a line number, it processes the line as is. If
+        there is a line number, sendCommand takes whatever 
+        line number is in the command and replaces it with the
+        given line number.
+        '''
+        if len(command)==0:
+            return
+        print command
+        
+        if lineNumber!=-1:
+            if command[0]=='N':
+               i=1
+               while command[i].isdigit():
+                   i+=1
+               print command[i:]
+               command = 'N'+str(lineNumber)+command[i:]
         self.commandQueue.append(command)
 
     def close(self):
@@ -261,17 +281,17 @@ if __name__ == '__main__':
                 'n210x0y0',
                 ]
 
-#     file = open('cncweb.txt')
-#     #file = open('geebeepath.txt')
-#     commands = file.readlines()
-#     file.close()
+    file = open('cncweb_short.txt')
+    #file = open('geebeepath.txt')
+    commands = file.readlines()
+    file.close()
 
 
     grbl = grblSerial()
 
-    for command in commands:
+    for i,command in enumerate(commands):
 #        print 'adding'
-        grbl.addCommand(command)
+        grbl.addCommand(command, lineNumber=i)
 
     while not grbl.bufferEmpty():
         time.sleep(0.1)
