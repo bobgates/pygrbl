@@ -9,6 +9,15 @@ import time
 import sys
 from PyQt4.QtCore import * #QTimer, QObject
 import copy
+import string
+
+import logging
+logger = logging.getLogger('grblserial')
+hdlr = logging.FileHandler('log_.txt')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr) 
+logger.setLevel(logging.DEBUG)
 
 
 class grblStatusT(object):
@@ -23,16 +32,9 @@ class grblStatusT(object):
         self.autoMode = False
 
     def __eq__(self, other):
-        #print 'In test'
-        #print
-        #print self.__dict__
-        #print other.__dict__
         if type(other) is type(self):
             return self.__dict__ == other.__dict__
         return False
-    
-#     def __ne__(self, other):
-#         return not self.__eq__(other)
 
 
 class grblSerial(QObject):
@@ -68,9 +70,9 @@ class grblSerial(QObject):
         self.commandQueue = []
         self.line_number=-1
         self.status = grblStatusT()
-        self.timerInterval = 20     # milliseconds
+        self.timerInterval = 200     # milliseconds
         self.timer = QTimer() 
-        self.connect(self.timer, SIGNAL("timeout()"), self.tick) 
+        self.connect(self.timer, SIGNAL("timeout()"), self.stick) 
         self.timer.start(self.timerInterval);
         
       
@@ -85,12 +87,13 @@ class grblSerial(QObject):
         startedOk= False
         for i in range(5):
             line = ser.readline()
-            #print str(i)+': '+str(line)
+            logger.debug('in openSerial rx: '+line)
             if 'ok' in line:
                 startedOk = True
                 break
        
         if not startedOk:
+            logger.error('unable to open serial port connection to grbl')
             raise Exception('Unable to connect to grbl')
         
         return ser
@@ -114,34 +117,22 @@ class grblSerial(QObject):
         '''   
         
         status = copy.copy(self.status)
-        #print 'About to test'
-        #print self.status.__dict__
-        #print self.status.__dict__['y']
-        
+        logger.debug('updateStatus tx1: eq')
         self.send('eq\n')
         line = self.ser.readline()
+        logger.debug('updateStatus rx1: '+line)
         if not ('EQ' in line):
+            logger.error('updateStatus : EQ message failed')
             return  # ie quietly ignore that EQ failed
             raise Exception("EQ command failed")
         line = self.ser.readline()
+        logger.debug('updateStatus rx2: '+line)
         self.status = self.parseStatus(line)
-        # x = 0.0;
-#         self.y = 0.0;
-#         self.z = 0.0;
-#         self.lineNumber = 0;
-#         self.bufferReady = False;
-#         self.machineRunning = False;
-#         self.autoMode = False;
-#        print status.x, status.y, status.z, status.lineNumber, \
-#              status.bufferReady, status.machineRunning, status.autoMode
-#        print self.status.x, self.status.y, self.status.z, self.status.lineNumber, \
-#              self.status.bufferReady, self.status.machineRunning, self.status.autoMode
-        #print self.status.y
-        #if status.y != self.status.y:
-        #    print '********************** different'
-        if status!=self.status:
+
+#        if status!=self.status:
 #            print "Emitting signal"
-            self.emit(SIGNAL("statusChanged"), self.status)
+#            self.emit(SIGNAL("statusChanged"), self.status)
+            
             
     def parseStatus(self, line):
         '''Takes a line response from grbl to an 'eq' command,
@@ -160,7 +151,7 @@ class grblSerial(QObject):
         startz = line.find('Z')
         
         if (startn<0) or (startx<0) or (starty<0) or (startz<0):
-            raise Exception('Bad format from eq line')
+            raise Exception('Bad format from eq line: '+line)
         self.status.lineNumber = int(line[startn+1:startx])
         self.status.x = float(line[startx+1:starty])
         self.status.y = float(line[starty+1:startz])
@@ -169,11 +160,17 @@ class grblSerial(QObject):
        
        
     def getStatus(self):
-        '''Use this call to get the status, because
-        it updates the status from grbl before returning.
+        '''Use this call to get the status as last reported
         '''
+        return self.status
+        
+    def getFreshStatus(self):
+        '''Use this call to get grbl to update its status 
+        before returning'''
         self.updateStatus()
         return self.status
+    
+        
        
     def stripWhitespace(self, str):
         line = str.replace(' ','')
@@ -185,24 +182,42 @@ class grblSerial(QObject):
     def sendCommand(self, command):
         
         command = self.stripWhitespace(command).upper()
-       
+        
+        logger.debug('sendCommand tx: '+command)
+
         self.send(command+'\n')
            
         line = self.ser.readline()
+        logger.debug('sendCommand rx1: '+line)
+
+        
         line = self.stripWhitespace(line).upper()
            
         if line != command:
-            return 0
+            logger.error('sendCommand: Response:_'+line+'_ does not equal command:_'+command+'_')
             raise Exception('Response:_'+line+'_ does not equal command:_'+command+'_')
             
         line = self.ser.readline()
+        logger.debug('sendCommand rx2: '+line)
         if not ('ok' in line):
-            return 0
+            logger.error('sendCommand: response to command:_'+command+'_ not okay: '+line)
             raise Exception('Response to command:_'+command+'_ not okay: '+line)
         return 1
       
     def emergencyStop(self):
         self.sendCommand('ES\n')
+        logger.debug('Emergency stop activated')
+        while len(self.commandQueue)>0:
+            self.commandQueue.pop()
+        logger.debug('Emergency stop routine left happily')
+        
+    def stick(self):
+        logger.debug('in stick***********************************')
+        self.tick()
+        if status!=self.status:
+            logger.debug('in stick: emitting status')
+            self.emit(SIGNAL("statusChanged"), self.status)
+        
         
     def tick(self):
         '''Timer update: checks if anything is in the
@@ -210,28 +225,27 @@ class grblSerial(QObject):
         either the queue is empty or grbl isn't accepting
         any further commands because its buffer is full.
         '''
-        #print "in tick"
+        logger.debug('in tick------------------------------------')
         self.updateStatus()
+        logger.debug('tick: after initial update')
         if len(self.commandQueue)>0:
             while (self.status.bufferReady) and (len(self.commandQueue)>0):
                 command = self.commandQueue.pop(0)
-                #print command
-                
                 runCommand = True
-                #print 'Command:',command,'_'
                 if len(self.stripWhitespace(command))==0:
                    runCommand = False;
                 for text in grblSerial.unsupported:
                     if command.find(text)!=-1:
                        runCommand = False
                        break
-                #print runCommand      
                 if runCommand:
-                    print '\nSending: ',command
+                    #print '\nSending: ',command
                     if  not self.sendCommand(command):
-                        pass
-                        #self.commandQueue.insert(0, command)
+                        self.commandQueue.insert(0, command)
+                        break
+                logger.debug('tick: before final updateStatus')
                 self.updateStatus()
+                logger.debug('tick: after final updateStatus')
                         
                         
     def bufferEmpty(self):
@@ -246,14 +260,12 @@ class grblSerial(QObject):
         '''
         if len(command)==0:
             return
-        print command
         
         if lineNumber!=-1:
             if command[0]=='N':
                i=1
                while command[i].isdigit():
                    i+=1
-               print command[i:]
                command = 'N'+str(lineNumber)+command[i:]
         self.commandQueue.append(command)
 
@@ -294,7 +306,7 @@ if __name__ == '__main__':
         grbl.addCommand(command, lineNumber=i)
 
     while not grbl.bufferEmpty():
-        time.sleep(0.1)
+        time.sleep(2)
         grbl.tick()
         result = grbl.getStatus()
         print result.lineNumber,': ', result.x, result.y, result.z
@@ -305,7 +317,7 @@ if __name__ == '__main__':
     # its display gets zeroed. This allows me to at least check what
     # it was displaying when the program ended.
     for i in range(100):
-        time.sleep(0.1)
+        time.sleep(2)
         #grbl.tick()
         result = grbl.getStatus()
         print result.lineNumber,': ', result.x, result.y, result.z
