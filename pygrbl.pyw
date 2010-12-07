@@ -14,12 +14,22 @@ import platform
 import sys
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
+import logging
+
 #import helpform
 #import newimagedlg
 
 import qrc_resources
 import grblserial
 import gc_parser
+
+logger = logging.getLogger('grblserial')
+#hdlr = logging.FileHandler('log_.txt')
+#formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s \n')
+#hdlr.setFormatter(formatter)
+#logger.addHandler(hdlr) 
+#logger.setLevel(logging.DEBUG)
+
 
 __version__ = "0.1.0"
 
@@ -48,6 +58,13 @@ class MainWindow(QMainWindow):
         
         self.grbl = grblserial.grblSerial()
         self.connect(self.grbl, SIGNAL('statusChanged'), self.updateStatus)
+        
+        self.timerInterval = 500
+        self.timer = QTimer() 
+        self.connect(self.timer, SIGNAL("timeout()"), self.grbl.tick) 
+        self.timer.start(self.timerInterval);
+        
+        
         
         viewTopAction = self.createAction("&Top", self.viewTop,
                  None, None,
@@ -204,6 +221,8 @@ class MainWindow(QMainWindow):
         fileToolbar.addSeparator()
         fileToolbar.addAction(emergencyStopAction)
         
+#    def tick(self):
+#        pass
 
     def updateStatus(self, status):
         self.gcViewer.setPosition(status)
@@ -250,15 +269,18 @@ class MainWindow(QMainWindow):
             self.goPlay()
             
     def goPlay(self):
+        logger.debug('About to start goPlay()()()()()()()()()()()()()()()()()')
         self.play = True
         self.runPlayPause.setIcon(QIcon('images/media-playback-pause-2.png'))
-       
         block = self.editor.document().begin()
         lineNumber = 1
         while block.isValid(): 
-            self.grbl.addCommand(str(block.text()), lineNumber=lineNumber)
+            self.grbl.queueCommand(str(block.text()), lineNumber=lineNumber)
             block = block.next()   
             lineNumber+=1
+        logger.debug('Leaving goPlay()()()()()()()()()()()()()()()()()()()()')
+        self.statusBar().showMessage('Leaving goPlay', 5000)
+            
         
     def goPause(self):
         self.play = False;
@@ -320,7 +342,7 @@ class MainWindow(QMainWindow):
  
  
     def goOneLine(self):
-        self.grbl.addCommand(str(self.commandLine.text()))
+        self.grbl.queueCommand(str(self.commandLine.text()))
         self.historyText.append(self.commandLine.text())
         self.commandLine.setText('')
     

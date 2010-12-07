@@ -71,9 +71,9 @@ class grblSerial(QObject):
         self.line_number=-1
         self.status = grblStatusT()
         self.timerInterval = 200     # milliseconds
-        self.timer = QTimer() 
-        self.connect(self.timer, SIGNAL("timeout()"), self.stick) 
-        self.timer.start(self.timerInterval);
+#        self.timer = QTimer() 
+#        self.connect(self.timer, SIGNAL("timeout()"), self.stick) 
+#        self.timer.start(self.timerInterval);
         
       
     def openSerial(self, portname):
@@ -82,7 +82,7 @@ class grblSerial(QObject):
         (or at least something that comes back with 
         'ok', then raise an exception
         '''
-        ser = serial.Serial(portname,115200, timeout=6)
+        ser = serial.Serial(portname,115200, timeout=12)
         
         startedOk= False
         for i in range(5):
@@ -116,7 +116,7 @@ class grblSerial(QObject):
         way.
         '''   
         
-        status = copy.copy(self.status)
+        #status = copy.copy(self.status)
         logger.debug('updateStatus tx1: eq')
         self.send('eq\n')
         line = self.ser.readline()
@@ -211,12 +211,12 @@ class grblSerial(QObject):
             self.commandQueue.pop()
         logger.debug('Emergency stop routine left happily')
         
-    def stick(self):
-        logger.debug('in stick***********************************')
-        self.tick()
-        if status!=self.status:
-            logger.debug('in stick: emitting status')
-            self.emit(SIGNAL("statusChanged"), self.status)
+#    def stick(self):
+#        logger.debug('in stick***********************************')
+#        self.tick()
+#         if status!=self.status:
+#             logger.debug('in stick: emitting status')
+#             self.emit(SIGNAL("statusChanged"), self.status)
         
         
     def tick(self):
@@ -225,6 +225,7 @@ class grblSerial(QObject):
         either the queue is empty or grbl isn't accepting
         any further commands because its buffer is full.
         '''
+        status = copy.copy(self.status)
         logger.debug('in tick------------------------------------')
         self.updateStatus()
         logger.debug('tick: after initial update')
@@ -246,12 +247,19 @@ class grblSerial(QObject):
                 logger.debug('tick: before final updateStatus')
                 self.updateStatus()
                 logger.debug('tick: after final updateStatus')
-                        
+        if not status==self.status:   #I don't know why, but != doesn't work
+#            print "Emitting signal"
+#            logger.debug(status.__dict__)
+#            logger.debug(self.status.__dict__)
+#            logger.debug(status==self.status)
+#            logger.debug('tick: about to emit signal=========================')
+            self.emit(SIGNAL("statusChanged"), self.status)
+                
                         
     def bufferEmpty(self):
         return len(self.commandQueue)==0
         
-    def addCommand(self, command, lineNumber=-1):
+    def queueCommand(self, command, lineNumber=-1):
         '''Adds a g-code command to grbl's queue. If this is called
         without a line number, it processes the line as is. If
         there is a line number, sendCommand takes whatever 
@@ -303,7 +311,7 @@ if __name__ == '__main__':
 
     for i,command in enumerate(commands):
 #        print 'adding'
-        grbl.addCommand(command, lineNumber=i)
+        grbl.queueCommand(command, lineNumber=i)
 
     while not grbl.bufferEmpty():
         time.sleep(2)
