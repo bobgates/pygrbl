@@ -92,20 +92,26 @@ class GLWidget(QtOpenGL.QGLWidget):
 		self.zmax = 5
 		
 		self.pos = [0,0,0]
-		self.countdown = 12.3
+		self.countdown = 0
 		self.xRot = 0
 		self.yRot = 0
 		self.zRot = 0
-		self.xOffset = 0
-		self.yOffset = 0
-		self.zOffset = 0
+		self.xOffset = 0.0
+		self.yOffset = 0.0
+		self.zOffset = 0.0
 		self.translate = -80
 		
 		self.gear1Rot = 0
 
 		self.coordFont = QtGui.QFont()
 		self.coordFont.setPointSize(36)
+		self.mouseFont = QtGui.QFont()
+		self.mouseFont.setPointSize(12)
+		self.showMouse = False
+		
+		self.mousePos = [0., 0.]
 
+		self.aspect_ratio=1
 		self.m_d_left_plane = -1.0
 		self.m_d_width = 2.0
 		self.m_d_bottom_plane = -1.0
@@ -113,16 +119,29 @@ class GLWidget(QtOpenGL.QGLWidget):
 		self.m_d_near_plane = 5.0
 		self.m_d_far_plane = 900.0
 		self.usePerspective = False
+		
+		self.lastPos = 0
+		self.setMouseTracking(True)
+		
 
-		timer = QtCore.QTimer(self)
-		timer.timeout.connect(self.advanceGears)
-		#timer.start(20)
+		# timer = QtCore.QTimer(self)
+		# timer.timeout.connect(self.advanceGears)
+		# #timer.start(20)
 
 	def __del__(self):
 		self.makeCurrent()
 		glDeleteLists(self.gear1, 1)
 		glDeleteLists(self.gear2, 1)
 		glDeleteLists(self.gear3, 1)
+
+	def setPosition(self, status):
+		#print "in setPosition, y=",status.y
+		self.pos[0]=status.x
+		self.pos[1]=status.y
+		self.pos[2]=status.z
+		self.countdown = status.countdown
+		self.updateGL()
+
 
 	def setXRotation(self, angle):
 		self.normalizeAngle(angle)
@@ -157,7 +176,7 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 	def setYOffset(self, Offset):
 		if Offset != self.yOffset:
-			print 'z Offset: ', Offset
+			print 'y Offset: ', Offset
 			self.yOffset = Offset
 			self.yOffsetChanged.emit(Offset)
 			self.updateGL()
@@ -168,6 +187,14 @@ class GLWidget(QtOpenGL.QGLWidget):
 			self.zOffset = Offset
 			self.zOffsetChanged.emit(Offset)
 			self.updateGL()
+			
+	def setRadius(self, radius):
+		radius *= 1.3333
+		self.m_d_left_plane = -radius/2.0
+		self.m_d_width = radius
+		self.m_d_bottom_plane = -radius/2.0
+		self.m_d_height = radius
+		
 
 	def initializeGL(self):
 		lightPos = (5.0, 5.0, 10.0, 1.0)
@@ -180,9 +207,9 @@ class GLWidget(QtOpenGL.QGLWidget):
 		glEnable(GL_LIGHT0)
 		glEnable(GL_DEPTH_TEST)
 
-		self.gear1 = self.makeGear(reflectance1, 1.0, 4.0, 1.0, 0.7, 20)
-		self.gear2 = self.makeGear(reflectance2, 0.5, 2.0, 2.0, 0.7, 10)
-		self.gear3 = self.makeGear(reflectance3, 1.3, 2.0, 0.5, 0.7, 10)
+		# self.gear1 = self.makeGear(reflectance1, 1.0, 4.0, 1.0, 0.7, 20)
+		# self.gear2 = self.makeGear(reflectance2, 0.5, 2.0, 2.0, 0.7, 10)
+		# self.gear3 = self.makeGear(reflectance3, 1.3, 2.0, 0.5, 0.7, 10)
 		self.cursor = self.makePos(reflectance3)
 		self.pos = [0,0,0]
 
@@ -196,15 +223,176 @@ class GLWidget(QtOpenGL.QGLWidget):
 		self.renderText(10, 120, 'Z: %.2f' % self.pos[2], self.coordFont)
 		
 		if self.countdown>0:
-			self.renderText(220, 40, 'Wait: %.1f' % self.countdown, self.coordFont)
+			self.renderText(self.width()-200, 40, 'Wait: %.1f' % self.countdown, self.coordFont)
+
+	def drawMouseText(self):
+		glColor3f(0.2, 0.2, 0.2)
+		xmax = self.width()
+		ymax = self.height()
+		if self.showMouse:
+			self.renderText(xmax - 120, ymax,  'X: %.2f' % self.mousePos[0], self.mouseFont)
+			self.renderText(xmax - 60, ymax ,'Y: %.2f' % self.mousePos[1], self.mouseFont)
+		else: 
+			self.renderText(xmax - 120, ymax,  '		', self.mouseFont)
+			self.renderText(xmax - 60, ymax ,'		  ', self.mouseFont)
 			
 	def setLimits(self, centre, radius):
-		self.xOffset = centre[0]
-		self.yOffset = centre[1]
-		self.zOffset = centre[2]
-		self.radius = radius
-		self.updateGL()
+		self.setXOffset(centre[0])
+		self.setYOffset(centre[1])
+		self.setZOffset(centre[2])
+		self.setRadius(radius)
+		print 'In setLimits'
+		return	
+		
+		# for i in range(3):
+		#	offset = centre[i]
+		#	if i==0:
+		#		slider = self.xOffsetSlider
+		#	elif i==1:
+		#		slider = self.yOffsetSlider
+		#	else:
+		#		slider = self.zOffsetSlider
+		#	if offset>1:
+		#		slider.setMaximum(0)
+		#		slider.setMinimum(-offset*2)
+		#		slider.setValue(-offset)
+		#	elif offset<-1:
+		#		slider.setMinimum(0)
+		#		slider.setMaximum(-offset*2)
+		#		slider.setValue(-offset)
+		#	else:
+		#		slider.setMinimum(-1)
+		#		slider.setMaximum(1)
+		#		slider.setValue(-offset)
+		# self.setRadius(radius)
 			
+
+	def paintGL(self):
+		print 'In paintGL',
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+
+		glPushMatrix()
+		glRotated(self.xRot / 16.0, 1.0, 0.0, 0.0)
+		glRotated(self.yRot / 16.0, 0.0, 1.0, 0.0)
+		glRotated(self.zRot / 16.0, 0.0, 0.0, 1.0)
+		
+		glTranslated(self.xOffset, self.yOffset, self.zOffset)
+
+		self.drawCursor(self.pos[0], self.pos[1], self.pos[2])
+
+
+
+		if self.drawList:
+			self.drawDrawList(self.pos[0], self.pos[1], self.pos[2])
+		# else:
+		# 	print 'Nothing in draw list'
+
+		glPopMatrix()
+		self.drawText()
+		self.drawMouseText()
+
+
+	def resizeGL(self, width, height):
+		side = min(width, height)
+		if side <= 0:
+			return
+
+		glViewport(0, 0, width, height)
+		self.aspect_ratio	=	float(self.width())/self.height();
+
+		glMatrixMode(GL_PROJECTION)
+		glLoadIdentity();
+		if self.usePerspective:
+			glFrustum(self.m_d_left_plane*self.aspect_ratio, (self.m_d_left_plane + self.m_d_width)*self.aspect_ratio,
+					  self.m_d_bottom_plane, (self.m_d_bottom_plane + self.m_d_height),
+					  self.m_d_near_plane, self.m_d_far_plane);
+		else:
+			glOrtho(self.m_d_left_plane*self.aspect_ratio, (self.m_d_left_plane + self.m_d_width)*self.aspect_ratio,
+					self.m_d_bottom_plane, (self.m_d_bottom_plane + self.m_d_height),
+					self.m_d_near_plane, self.m_d_far_plane);
+		glMatrixMode( GL_MODELVIEW );
+		self.updateGL();
+		
+		glLoadIdentity()
+		glTranslated(0.0, 0.0, -80)
+		
+	def zoomIn(self):
+		if max(self.m_d_width, self.m_d_height)<0.1:
+			return
+		self.m_d_left_plane	  *= 0.75
+		self.m_d_width		  *= 0.75
+		self.m_d_height		  *= 0.75
+		self.m_d_bottom_plane *= 0.75
+		self.resizeGL(self.width(), self.height())
+
+	def zoomOut(self):
+		if max(self.m_d_width, self.m_d_height)>1000:
+			return
+		self.m_d_left_plane	  *= 1.3333
+		self.m_d_width		  *= 1.3333
+		self.m_d_height		  *= 1.3333
+		self.m_d_bottom_plane *= 1.3333
+		self.resizeGL(self.width(), self.height())
+
+	def wheelEvent(self, event):
+		zoom = event.delta()/120	# gives 1 step of zoom
+		if zoom>0:
+			self.zoomIn()
+		else:
+			self.zoomOut()
+		
+
+	def mousePressEvent(self, event):
+		self.lastPos = event.pos()
+
+	def mouseMoveEvent(self, event):
+		if self.lastPos==0:
+			dx = event.x()
+			dy = event.y()
+		else:
+			dx = event.x() - self.lastPos.x()
+			dy = event.y() - self.lastPos.y()
+		
+		if not(event.buttons()):
+			self.mousePos[0] = (float(event.x())/self.width()  - 0.5) * self.m_d_width*self.aspect_ratio \
+								- self.xOffset
+			self.mousePos[1] = - (float(event.y())/self.height() - 0.5) * self.m_d_height + \
+							   - self.yOffset
+			self.showMouse = True
+			self.updateGL()
+		else:
+			self.showMouse = False
+			self.updateGL()
+
+		if event.buttons() & QtCore.Qt.LeftButton:
+			self.setXRotation(self.xRot + 8 * dy)
+			self.setYRotation(self.yRot + 8 * dx)
+		elif event.buttons() & QtCore.Qt.RightButton:
+			self.m_d_left_plane	  -= float(self.m_d_width)/self.width()*dx
+			self.m_d_bottom_plane += float(self.m_d_height)/self.height()*dy
+			self.resizeGL(self.width(), self.height())
+			
+			# self.setXRotation(self.xRot + 8 * dy)
+			# self.setZRotation(self.zRot + 8 * dx)
+
+		self.lastPos = event.pos()
+
+	def colorRule(self, gcode):
+		if gcode == 1.0:
+			glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 0., 0., 1.0))
+			glColor3f(1., 0., 0.)
+		elif gcode == 2.0:
+			glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (0.0, 0., 1.0, 1.0))
+			glColor3f(0.0, 0.0, 1.0)
+		elif gcode == 3.0:
+			glColor3f(1.0, 1.0, 1.0)
+			glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 1.0, 1.0, 1.0))
+		else:
+			glColor3f(0., 1., 0.)
+			glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (0.0, 1.0, 0.0, 1.0))
+		
+
+
 	def initDrawList(self, gl_list):
 		''' This takes a parameter that is a list of shapes to draw.
 		Each element of the list consists of a type number, followed
@@ -212,7 +400,7 @@ class GLWidget(QtOpenGL.QGLWidget):
 		for all the line segments to be drawn. The type number corresponds
 		to the G code, ie 0, 1, 2 or 3.
 		'''
-		
+
 		list = glGenLists(1)
 		glNewList(list, GL_COMPILE)
 		glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 0., 0., 1.0))
@@ -221,7 +409,7 @@ class GLWidget(QtOpenGL.QGLWidget):
 		glEnable(GL_LINE_SMOOTH)
 
 		for item in gl_list:
-			#print item
+			# print item
 			if len(item)==1:
 				line=item[0]
 				# if pushNames:
@@ -230,18 +418,7 @@ class GLWidget(QtOpenGL.QGLWidget):
 				#	#print line[1]
 				#	#assert(False)
 				glBegin(GL_LINES)
-				if line[0] == 1.0:
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 0., 0., 1.0))
-					glColor3f(1., 0., 0.)
-				elif line[0] == 2.0:
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (0.0, 0., 1.0, 1.0))
-					glColor3f(0.0, 0.0, 1.0)
-				elif line[0] == 3.0:
-					glColor3f(1.0, 1.0, 1.0)
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 1.0, 1.0, 1.0))
-				else:
-					glColor3f(0., 1., 0.)
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (0.0, 1.0, 0.0, 1.0))
+				self.colorRule(line[0])
 				glVertex3f(line[2], line[3], line[4])
 				glVertex3f(line[5], line[6], line[7])
 				glEnd()
@@ -253,18 +430,7 @@ class GLWidget(QtOpenGL.QGLWidget):
 				#	glPushMatrix()
 				#	glPushName(item[1])
 				glBegin(GL_LINE_STRIP)
-				if line[0] == 1.0:
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 0., 0., 1.0))
-					glColor3f(1., 0., 0.)
-				elif line[0] == 2.0:
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (0.0, 0., 1.0, 1.0))
-					glColor3f(0.0, 0.0, 1.0)
-				elif line[0] == 3.0:
-					glColor3f(1.0, 1.0, 1.0)
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (1.0, 1.0, 1.0, 1.0))
-				else:
-					glColor3f(0., 1., 0.)
-					glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, (0.0, 1.0, 0.0, 1.0))
+				self.colorRule(line[0])
 				for line in item[2:]:
 					glVertex3f(line[0], line[1], line[2])
 				glEnd()
@@ -273,110 +439,7 @@ class GLWidget(QtOpenGL.QGLWidget):
 				#	glPopMatrix()	 
 		glEndList()
 		self.drawList = list
-
-
-	def paintGL(self):
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-
-		glPushMatrix()
-		glRotated(self.xRot / 16.0, 1.0, 0.0, 0.0)
-		glRotated(self.yRot / 16.0, 0.0, 1.0, 0.0)
-		glRotated(self.zRot / 16.0, 0.0, 0.0, 1.0)
-		
-		glTranslated(self.xOffset/360., self.zOffset/360., self.zOffset/360.)
-
-		# self.drawGear(self.gear1, -3.0, -2.0, 0.0, self.gear1Rot / 16.0)
-		# self.drawGear(self.gear2, +3.1, -2.0, 0.0,
-		#		-2.0 * (self.gear1Rot / 16.0) - 9.0)
-		# 
-		self.drawGear(self.cursor, self.pos[0], self.pos[1], self.pos[2], 0)
-
-		if self.drawList:
-			self.drawDrawList(self.pos[0], self.pos[1], self.pos[2])
-
-		# glRotated(+90.0, 1.0, 0.0, 0.0)
-		# self.drawGear(self.gear3, -3.1, -1.8, -2.2,
-		#		+2.0 * (self.gear1Rot / 16.0) - 2.0)
-
-		glPopMatrix()
-		self.drawText()
-
-
-	def resizeGL(self, width, height):
-		side = min(width, height)
-		if side <= 0:
-			return
-
-		glViewport(0, 0, width, height)
-		aspect_ratio	=	float(self.width())/self.height();
-
-		glMatrixMode(GL_PROJECTION)
-		glLoadIdentity();
-		if self.usePerspective:
-			glFrustum(self.m_d_left_plane*aspect_ratio, (self.m_d_left_plane + self.m_d_width)*aspect_ratio,
-					  self.m_d_bottom_plane, (self.m_d_bottom_plane + self.m_d_height),
-					  self.m_d_near_plane, self.m_d_far_plane);
-		else:
-			glOrtho(self.m_d_left_plane*aspect_ratio, (self.m_d_left_plane + self.m_d_width)*aspect_ratio,
-					self.m_d_bottom_plane, (self.m_d_bottom_plane + self.m_d_height),
-					self.m_d_near_plane, self.m_d_far_plane);
-		glMatrixMode( GL_MODELVIEW );
-		self.updateGL();
-		
-		glLoadIdentity()
-		glTranslated(0.0, 0.0, -80)
-		
-	def zoomIn(self):
-		self.m_d_left_plane	  *= 0.75
-		self.m_d_width        *= 0.75
-		self.m_d_height  	  *= 0.75
-		self.m_d_bottom_plane *= 0.75
-		self.resizeGL(self.width(), self.height())
-
-	def zoomOut(self):
-		self.m_d_left_plane	  *= 1.3333
-		self.m_d_width        *= 1.3333
-		self.m_d_height 	  *= 1.3333
-		self.m_d_bottom_plane *= 1.3333
-		self.resizeGL(self.width(), self.height())
-
-	def wheelEvent(self, event):
-		
-		zoom = event.delta()/120	# gives 1 step of zoom
-		
-		if zoom>0:
-			self.zoomIn()
-		else:
-			self.zoomOut()
-		
-		# self.translate = self.translate * (2+zoom)/2.0
-		# glTranslated(0.0, 0.0, self.translate)
-		
-		print event.delta(), self.translate
-
-	def mousePressEvent(self, event):
-		self.lastPos = event.pos()
-
-	def mouseMoveEvent(self, event):
-		dx = event.x() - self.lastPos.x()
-		dy = event.y() - self.lastPos.y()
-
-		if event.buttons() & QtCore.Qt.LeftButton:
-			self.setXRotation(self.xRot + 8 * dy)
-			self.setYRotation(self.yRot + 8 * dx)
-		elif event.buttons() & QtCore.Qt.RightButton:
-			self.m_d_left_plane   -= float(self.m_d_width)/self.width()*dx
-			self.m_d_bottom_plane += float(self.m_d_height)/self.height()*dy
-			self.resizeGL(self.width(), self.height())
-			
-			# self.setXRotation(self.xRot + 8 * dy)
-			# self.setZRotation(self.zRot + 8 * dx)
-
-		self.lastPos = event.pos()
-
-	def advanceGears(self):
-		self.gear1Rot += 2 * 16
-		self.updateGL()	   
+		print 'Drawlist created in initDrawList: ', list
 
 	def xRotation(self):
 		return self.xRot
@@ -386,94 +449,11 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 	def zRotation(self):
 		return self.zRot
-
-	def makeGear(self, reflectance, innerRadius, outerRadius, thickness, toothSize, toothCount):
-		list = glGenLists(1)
-		glNewList(list, GL_COMPILE)
-		glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, reflectance)
-
-		r0 = innerRadius
-		r1 = outerRadius - toothSize / 2.0
-		r2 = outerRadius + toothSize / 2.0
-		delta = (2.0 * math.pi / toothCount) / 4.0
-		z = thickness / 2.0
-
-		glShadeModel(GL_FLAT)
-
-		for i in range(2):
-			if i == 0:
-				sign = +1.0
-			else:
-				sign = -1.0
-
-			glNormal3d(0.0, 0.0, sign)
-
-			glBegin(GL_QUAD_STRIP)
-
-			for j in range(toothCount+1):
-				angle = 2.0 * math.pi * j / toothCount
-				glVertex3d(r0 * math.cos(angle), r0 * math.sin(angle), sign * z)
-				glVertex3d(r1 * math.cos(angle), r1 * math.sin(angle), sign * z)
-				glVertex3d(r0 * math.cos(angle), r0 * math.sin(angle), sign * z)
-				glVertex3d(r1 * math.cos(angle + 3 * delta), r1 * math.sin(angle + 3 * delta), sign * z)
-
-			glEnd()
-
-			glBegin(GL_QUADS)
-
-			for j in range(toothCount):
-				angle = 2.0 * math.pi * j / toothCount				  
-				glVertex3d(r1 * math.cos(angle), r1 * math.sin(angle), sign * z)
-				glVertex3d(r2 * math.cos(angle + delta), r2 * math.sin(angle + delta), sign * z)
-				glVertex3d(r2 * math.cos(angle + 2 * delta), r2 * math.sin(angle + 2 * delta), sign * z)
-				glVertex3d(r1 * math.cos(angle + 3 * delta), r1 * math.sin(angle + 3 * delta), sign * z)
-
-			glEnd()
-
-		glBegin(GL_QUAD_STRIP)
-
-		for i in range(toothCount):
-			for j in range(2):
-				angle = 2.0 * math.pi * (i + (j / 2.0)) / toothCount
-				s1 = r1
-				s2 = r2
-
-				if j == 1:
-					s1, s2 = s2, s1
-
-				glNormal3d(math.cos(angle), math.sin(angle), 0.0)
-				glVertex3d(s1 * math.cos(angle), s1 * math.sin(angle), +z)
-				glVertex3d(s1 * math.cos(angle), s1 * math.sin(angle), -z)
-
-				glNormal3d(s2 * math.sin(angle + delta) - s1 * math.sin(angle), s1 * math.cos(angle) - s2 * math.cos(angle + delta), 0.0)
-				glVertex3d(s2 * math.cos(angle + delta), s2 * math.sin(angle + delta), +z)
-				glVertex3d(s2 * math.cos(angle + delta), s2 * math.sin(angle + delta), -z)
-
-		glVertex3d(r1, 0.0, +z)
-		glVertex3d(r1, 0.0, -z)
-		glEnd()
-
-		glShadeModel(GL_SMOOTH)
-
-		glBegin(GL_QUAD_STRIP)
-
-		for i in range(toothCount+1):
-			angle = i * 2.0 * math.pi / toothCount
-			glNormal3d(-math.cos(angle), -math.sin(angle), 0.0)
-			glVertex3d(r0 * math.cos(angle), r0 * math.sin(angle), +z)
-			glVertex3d(r0 * math.cos(angle), r0 * math.sin(angle), -z)
-
-		glEnd()
-
-		glEndList()
-
-		return list	   
-
-	def drawGear(self, gear, dx, dy, dz, angle):
+		
+	def drawCursor(self, x, y, z):
 		glPushMatrix()
-		glTranslated(dx, dy, dz)
-		glRotated(angle, 0.0, 0.0, 1.0)
-		glCallList(gear)
+		glTranslated(x, y, z)
+		glCallList(self.cursor)
 		glPopMatrix()
 
 	def drawDrawList(self, dx, dy, dz):
@@ -481,7 +461,6 @@ class GLWidget(QtOpenGL.QGLWidget):
 		glTranslated(dx, dy, dz)
 		glCallList(self.drawList)
 		glPopMatrix()
-			
 
 	def makePos(self, reflectance):
 		NO_SEGS=20
@@ -535,11 +514,8 @@ class GLWidget(QtOpenGL.QGLWidget):
 			glVertex3f(x1, y1, z1)
 			glVertex3f(x1, y1, z2)
 		glEnd()
-
 		glEndList()
-
 		return list	  
- 
 
 	def drawPos(self, dx, dy, dz, angle):
 		glPushMatrix()
@@ -547,8 +523,6 @@ class GLWidget(QtOpenGL.QGLWidget):
 		glRotated(angle, 0.0, 0.0, 1.0)
 		glCallList(self.pos)
 		glPopMatrix()
-
-
 
 	def normalizeAngle(self, angle):
 		while (angle < 0):
@@ -561,34 +535,59 @@ class GLWidget(QtOpenGL.QGLWidget):
 		self.xrot = 0.
 		self.yrot = 0.
 		self.zrot = 0.
-		self.xRotationChanged.emit(0.)
-		self.yRotationChanged.emit(0.)
-		self.zRotationChanged.emit(0.)
-		self.updateGL()
-		
-	def setTopRotView(self):
-		self.xRotationChanged.emit(0.)
-		self.yRotationChanged.emit(0.)
-		self.zRotationChanged.emit(90.*16)
+		# self.xRotationChanged.emit(angle)
 		self.updateGL()
 	
+		# self.xRotationChanged.emit(0.)
+		# self.yRotationChanged.emit(0.)
+		# self.zRotationChanged.emit(0.)
+		# self.updateGL()
+		print 'glWidget::setTopView'
+		
+	def setTopRotView(self):
+		self.setXRotation(0.)
+		self.setYRotation(0.)
+		self.setZRotation(90.*16)
+		# 	self.normalizeAngle(angle)
+		# 
+		# 	if angle != self.xRot:
+		# 		self.xRot = angle
+		# 		self.xRotationChanged.emit(angle)
+		# 		self.updateGL()
+		# 
+		# self.xRotationChanged.emit(0.)
+		# self.yRotationChanged.emit(0.)
+		# self.zRotationChanged.emit(90.*16)
+		# self.updateGL()
+	
 	def setLeftView(self):	
-		self.xRotationChanged.emit(270.*16)
-		self.yRotationChanged.emit(0.)
-		self.zRotationChanged.emit(90.*16)
-		self.updateGL()
+		self.setXRotation(270.*16)
+		self.setYRotation(0.)
+		self.setZRotation(90.*16)
+		# self.xRotationChanged.emit(270.*16)
+		# self.yRotationChanged.emit(0.)
+		# self.zRotationChanged.emit(90.*16)
+		# self.updateGL()
 
 	def setFrontView(self): 
-		self.xRotationChanged.emit(270.*16)
-		self.yRotationChanged.emit(0.)
-		self.zRotationChanged.emit(0.)
-		self.updateGL()
+		self.setXRotation(270.*16)
+		self.setYRotation(0.)
+		self.setZRotation(0.)
+		# self.xRotationChanged.emit(270.*16)
+		# self.yRotationChanged.emit(0.)
+		# self.zRotationChanged.emit(0.)
+		# self.updateGL()
+		print 'glWidget::setFrontView'
 
 	def setIsoView(self):	
-		self.xRotationChanged.emit((360.-45)*16)
-		self.yRotationChanged.emit(0.)
-		self.zRotationChanged.emit(45.*16)
-		self.updateGL()
+		self.setXRotation((360.-45)*16)
+		self.setYRotation(0.)
+		self.setZRotation(45.*16)
+		# self.xRotationChanged.emit((360.-45)*16)
+		# self.yRotationChanged.emit(0.)
+		# self.zRotationChanged.emit(45.*16)
+		# print 'glWidget::setIsoView'
+		# self.updateGL()
 
 
 
@@ -629,12 +628,12 @@ class MainWindow(QtGui.QMainWindow):
 		zSlider = self.createSlider(self.glWidget.zRotationChanged,
 				self.glWidget.setZRotation)
 
-		aSlider = self.createSlider(self.glWidget.xOffsetChanged,
-				self.glWidget.setXOffset)
-		bSlider = self.createSlider(self.glWidget.yOffsetChanged,
-				self.glWidget.setYOffset)
-		cSlider = self.createSlider(self.glWidget.zOffsetChanged,
-				self.glWidget.setZOffset)
+		self.xOffsetSlider = self.createSlider(self.glWidget.xOffsetChanged,
+											   self.glWidget.setXOffset)
+		self.yOffsetSlider = self.createSlider(self.glWidget.yOffsetChanged,
+											   self.glWidget.setYOffset)
+		self.zOffsetSlider = self.createSlider(self.glWidget.zOffsetChanged,
+											   self.glWidget.setZOffset)
 				
 		buttonLayout = QtGui.QHBoxLayout()
 		topButton = QtGui.QPushButton('Top')
@@ -670,9 +669,9 @@ class MainWindow(QtGui.QMainWindow):
 		centralLayout.addWidget(xSlider, 1, 0)
 		centralLayout.addWidget(ySlider, 2, 0)
 		centralLayout.addWidget(zSlider, 3, 0)
-		centralLayout.addWidget(aSlider, 4, 0)
-		centralLayout.addWidget(bSlider, 5, 0)
-		centralLayout.addWidget(cSlider, 6, 0)
+		centralLayout.addWidget(self.xOffsetSlider, 4, 0)
+		centralLayout.addWidget(self.yOffsetSlider, 5, 0)
+		centralLayout.addWidget(self.zOffsetSlider, 6, 0)
 		centralLayout.addLayout(buttonLayout, 7, 0)
 		
 		centralWidget.setLayout(centralLayout)
@@ -688,7 +687,7 @@ class MainWindow(QtGui.QMainWindow):
 		if self.perspectiveButton.text()==QtCore.QString('Ortho'):
 			self.perspectiveButton.setText('Perspective')
 			self.glWidget.usePerspective = True 
-		else: 	
+		else:	
 			self.perspectiveButton.setText('Ortho')
 			self.glWidget.usePerspective = False
 		self.glWidget.resizeGL(self.width(), self.height())
@@ -759,11 +758,28 @@ class MainWindow(QtGui.QMainWindow):
 	def initDrawList(self, gl_list):
 		self.glWidget.initDrawList(gl_list)
 
-
-
 	def setLimits(self, centre, radius):
-		self.glWidget.setLimits(centre, radius) 
-
+		for i in range(3):
+			offset = centre[i]
+			if i==0:
+				slider = self.xOffsetSlider
+			elif i==1:
+				slider = self.yOffsetSlider
+			else:
+				slider = self.zOffsetSlider
+			if offset>1:
+				slider.setMaximum(0)
+				slider.setMinimum(-offset*2)
+				slider.setValue(-offset)
+			elif offset<-1:
+				slider.setMinimum(0)
+				slider.setMaximum(-offset*2)
+				slider.setValue(-offset)
+			else:
+				slider.setMinimum(-1)
+				slider.setMaximum(1)
+				slider.setValue(-offset)
+		self.glWidget.setRadius(radius)
 
 if __name__ == '__main__':
 
@@ -777,7 +793,9 @@ if __name__ == '__main__':
 	app = QtGui.QApplication(sys.argv)
 	mainWin = MainWindow()
 	mainWin.initDrawList(parser.gl_list)
-	# mainWin.setLimits(center, radius)
+	mainWin.glWidget.setTopView()
+	
+	mainWin.setLimits(center, radius)
 	mainWin.show()
 	
 	sys.exit(app.exec_())	 

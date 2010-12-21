@@ -14,11 +14,11 @@ import math
 #import grblserial
 import logging
 logger = logging.getLogger('grblserial')
-hdlr = logging.FileHandler('log_.txt')
-formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
-hdlr.setFormatter(formatter)
-logger.addHandler(hdlr) 
-logger.setLevel(logging.DEBUG)
+# hdlr = logging.FileHandler('log_.txt')
+# formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+# hdlr.setFormatter(formatter)
+# logger.addHandler(hdlr) 
+# logger.setLevel(logging.ERROR)
 
 
 class groupName:
@@ -164,7 +164,7 @@ class gcParser():
 					sangle = math.atan2(sdy, sdx)
 					fangle = math.atan2(fdy, fdx)
 				
-					logger.debug('sangle: '+str(sangle)+' fangle: '+str(fangle))
+					logger.debug('start angle: '+str(sangle)+' finish angle: '+str(fangle))
 				
 					if motion == 'G2':
 						result = 2.0
@@ -177,7 +177,7 @@ class gcParser():
 					angle = sangle - fangle
 				
 					if angle<-math.pi:
-						angle += 2*math.pi
+						angle += math.pi
 					
 					if angle>math.pi:
 						angle -= math.pi
@@ -395,240 +395,12 @@ class gcParser():
 			
 		return center, radius
 
-
 #-------------------------------------------------------------------------------------------				
-class gcViewer(QGLViewer):
-
-	def __init__(self,parent = None):
-		QGLViewer.__init__(self,parent)
-				
-		#self.setStateFileName('.pygrbl.xml')	 
-			
-		self.drawing = [] 
-		self.center = 0.0
-		self.radius = 0.0
-		self.selected = -1.0
-		self.position = [0.0, 0.0, 0.0]
-		self.countdown = 0.0
-		
-		self.orig= Vec()
-		self.dir= Vec()
-		self.selectedPoint = Vec()
-		
-		self.coordFont = QFont()
-		self.coordFont.setPointSize(36)
-
-		#self.goIsoView()
-		#self.setAxisIsDrawn(True)
-		#self.setGridIsDrawn(True)
-		
-		
-	def setPosition(self, status):
-		#print "in setPosition, y=",status.y
-		self.position[0]=status.x
-		self.position[1]=status.y
-		self.position[2]=status.z
-		self.countdown = status.countdown
-		self.draw()
-		self.updateGL()
-		
-	def setGLList(self, drawing_data):
-		self.drawing = drawing_data
-		self.center, self.radius = getGLLimits(self.drawing)
-		#print 'Center: ', self.center, '  radius: ', self.radius
-		#assert(False)
-		self.updateGL()
-		
-	def goTopView(self):
-		self.constraint = WorldConstraint()
-		self.constraint.setRotationConstraintType(AxisPlaneConstraint.FREE)
-		self.camera().frame().setConstraint(self.constraint)
-
-		position = self.center	# Vec(25.0, 12.5, 25)
-		
-		self.camera().loadModelViewMatrix(True)
-		self.camera().loadProjectionMatrix(True)
-		self.camera().setPosition(position)
-		self.camera().setUpVector(Vec(0.,1.0,0.))
-		self.setSceneCenter(self.center) 
-		self.setSceneRadius(self.radius)
-		
-		self.camera().lookAt(self.center) #self.sceneCenter())
-
-		self.camera().setType(Camera.ORTHOGRAPHIC)
-		self.camera().showEntireScene()
-
-			# Forbid rotation
-		self.constraint.setRotationConstraintType(AxisPlaneConstraint.FORBIDDEN)
-		self.camera().frame().setConstraint(self.constraint)
-		self.draw()
-		
-	def goFrontView(self):
-		self.constraint = WorldConstraint()
-		self.constraint.setRotationConstraintType(AxisPlaneConstraint.FREE)
-		self.camera().frame().setConstraint(self.constraint)
-
-		position = self.center
-#		 position[2]=0.0
-		#position = Vec(0.0, 12.5, 0.0)
-		self.camera().loadModelViewMatrix(True)
-		self.camera().loadProjectionMatrix(True)
-		self.camera().setPosition(position)#position[view_type])
-		self.camera().setUpVector(Vec(0.,0.,1.))
-		self.setSceneCenter(self.center)
-		self.setSceneRadius(self.radius)
-		
-		self.camera().lookAt(self.center) #self.sceneCenter())
-
-		self.camera().setType(Camera.ORTHOGRAPHIC)
-		self.camera().showEntireScene()
-
-			# Forbid rotation
-		self.constraint.setRotationConstraintType(AxisPlaneConstraint.FORBIDDEN)
-		self.camera().frame().setConstraint(self.constraint)
-		self.draw()
-		
-# The values used here come from experiment:
-# print self.camera().position()
-# Vec(-13.5005,-23.5383,29.3551)
-# print self.camera().upVector()
-# Vec(0.272689,0.415509,0.867752)
-# print self.camera().viewDirection()
-# Vec(0.637896,0.597103,-0.48637)
-# print self.camera().rightVector()
-# Vec(0.720228,-0.686164,0.102228)
-# print self.camera().orientation()
-# Quaternion(0.452313,-0.228533,-0.296071,0.809646)
-
-	def goIsoView(self):
-		self.constraint = WorldConstraint()
-		self.constraint.setRotationConstraintType(AxisPlaneConstraint.FREE)
-		self.camera().frame().setConstraint(self.constraint)
-		
-		position = self.center
-
-		self.camera().loadModelViewMatrix(True)
-		self.camera().loadProjectionMatrix(True)
-		self.camera().setPosition(self.center)	
-		self.camera().setUpVector(Vec(0.272689,0.415509,0.867752))
-#		 v = Vec(0.707,0.707, 0.816)
-#		 v= Vec(0.281369,0.64599,0.709598)
-#		 #v = v/(math.sqrt(v[0]**2+v[1]**2+v[2]**2))
-#		 self.camera().setUpVector(v)
-		self.setSceneCenter(self.center) 
-		self.setSceneRadius(self.radius)
-		
-		self.camera().lookAt(self.center) #self.sceneCenter())
-
-		self.camera().setType(Camera.ORTHOGRAPHIC)
-		self.camera().showEntireScene()
-
-		self.draw()
-		self.updateGL()
-	   
-	def draw(self):
-		if self.drawing:
-			draw_gl_list(self.drawing, self.selected, False)
-			draw_position(self.position)
-		ogl.glColor3f(0.2, 0.2, 0.2)
-		self.drawText(10, 40, 
-					  'X: %.2f' % self.position[0], 
-					  self.coordFont)
-		self.drawText(10, 80, 
-					  'Y: %.2f' % self.position[1], 
-					  self.coordFont)
-		self.drawText(10, 120, 
-					  'Z: %.2f' % self.position[2], 
-					  self.coordFont)
-		if self.countdown>0.0:
-			self.drawText(250, 40, 
-						  'Wait: %.1f s' % self.countdown, 
-						   self.coordFont)
-		#print self.camera().upVector()
-
-
-	def drawWithNames(self):
-		if self.drawing:
-			draw_gl_list(self.drawing, self.selected, True)
-				
-		QMessageBox.information(self, "In drawWithNames","In drawWithNames routine")
-
-
-	def postSelection(self,point):
-		# Compute orig and dir, used to draw a representation of the intersecting line
-		self.orig, self.dir = self.camera().convertClickToLine(point)
-
-		# Find the selectedPoint coordinates, using camera()->pointUnderPixel().
-		self.selectedPoint, found = self.camera().pointUnderPixel(point)
-		self.selectedPoint -= 0.01*self.dir # Small offset to make point clearly visible.
-		# Note that "found" is different from (selectedObjectId()>=0) because of the size of the select region.
-
-		if self.selectedName() == -1:
-			QMessageBox.information(self, "No selection",
-				 "No object selected under pixel " + str(point.x()) + "," + str(point.y()))
-		else:
-			QMessageBox.information(self, "Selection",
-				 "Spiral number " + str(self.selectedName()) + " selected under pixel " +
-				 str(point.x()) + "," + str(point.y()))
-
-	def init(self):
-		pass
-		#self.restoreStateFromFile()
-		#self.help()
-	def helpString(self):
-		return '' #helpstr
-	def closeEvent(self,event):
-		helpwidget = self.helpWidget()
-		if not helpwidget is None and helpwidget.isVisible() :
-			helpwidget.hide()
-		QGLViewer.closeEvent(self,event)
-
-class temp():
-   x=0.0
-   y=0.0
-   z=0.0
-   countdown=0.0
-
-
-def main():
-	qapp = QApplication([])
-	viewer = gcViewer()
-	
-	file = open('cncweb.txt')
-	a=file.readlines()
-	file.close()
-
-	
-	viewer.setGLList(parse_file(a))
-
-	viewer.goIsoView()
-	viewer.setWindowTitle("qglViewer")
-	
-	pos = temp()
-	pos.x = 4.3
-	pos.y=5.5
-	pos.z=-0.3
-	
-	viewer.setPosition(pos)
-	viewer.show()
-	qapp.exec_()
-
-# if __name__ == '__main__':
-# 
-# 	app = QtGui.QApplication(sys.argv)
-# 	mainWin = MainWindow()
-# 	mainWin.show()
-# 	sys.exit(app.exec_())	 
 
 if __name__ == '__main__':
-#	 main()
-#	read_test()		   
-
-#	list = read_test()
 
 	parser = gcParser()
 	parser.load('cncweb.txt')
-	for line in parser.gl_list:
-		print line
+	print 'Processed %d g-code lines' % (len(parser.gl_list),)
 
 
