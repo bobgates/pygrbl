@@ -26,10 +26,12 @@ class grblStatusT(object):
         self.x = 0.0
         self.y = 0.0
         self.z = 0.0
+        self.countdown = 0.0
         self.lineNumber = 0
         self.bufferReady = False
         self.machineRunning = False
         self.autoMode = False
+        self.waitMode = False
 
     def __eq__(self, other):
         if type(other) is type(self):
@@ -57,7 +59,7 @@ class grblSerial(QObject):
     
 
     # Unsupported g-codes are simply not sent to grbl.
-    unsupported = ['G04', 'G43']  
+    unsupported = ['G04', 'G43', 'G54']  
 
     def __init__(self):
         '''Initialize grblSerial object with default 
@@ -66,11 +68,15 @@ class grblSerial(QObject):
         super(grblSerial, self).__init__()
         #QObject.__init__(self)
         self.portname = '/dev/tty.usbserial-A700dXL8'
-        self.ser = self.openSerial(self.portname)
+        try:
+        	self.ser = self.openSerial(self.portname)
+        except:
+            self.ser = None
         self.commandQueue = []
         self.line_number=-1
         self.status = grblStatusT()
         self.timerInterval = 200     # milliseconds
+
 #        self.timer = QTimer() 
 #        self.connect(self.timer, SIGNAL("timeout()"), self.stick) 
 #        self.timer.start(self.timerInterval);
@@ -142,20 +148,27 @@ class grblSerial(QObject):
         self.status.bufferReady = (line[1]=='R')
         self.status.machineRunning = not (line[0]=='O')
         if self.status.machineRunning:
-            self.status.autoMode = (line[0]=='A')
+            self.status.autoMode = ((line[0]=='A') or (line[0]=='S'))
         else:
             self.status.autoMode = False;
         startn = line.find('N')
         startx = line.find('X')
         starty = line.find('Y')
         startz = line.find('Z')
+        startl = line.find('L')
         
         if (startn<0) or (startx<0) or (starty<0) or (startz<0):
             raise Exception('Bad format from eq line: '+line)
         self.status.lineNumber = int(line[startn+1:startx])
         self.status.x = float(line[startx+1:starty])
         self.status.y = float(line[starty+1:startz])
-        self.status.z = float(line[startz+1:])
+        if startl>=0:
+            self.status.z = float(line[startz+1:startl])
+            self.status.countdown = float(line[startl+1:])/10
+            self.status.waitmode = True
+        else:
+            self.status.z = float(line[startz+1:])
+            self.status.waitmode = False
         return self.status    
        
        
@@ -225,6 +238,9 @@ class grblSerial(QObject):
         either the queue is empty or grbl isn't accepting
         any further commands because its buffer is full.
         '''
+        
+        if not self.ser:
+            return
         status = copy.copy(self.status)
         logger.debug('in tick------------------------------------')
         self.updateStatus()
@@ -240,19 +256,15 @@ class grblSerial(QObject):
                        runCommand = False
                        break
                 if runCommand:
-                    #print '\nSending: ',command
-                    if  not self.sendCommand(command):
-                        self.commandQueue.insert(0, command)
-                        break
+                    try:
+                        self.sendCommand(command)
+                    except:
+						self.commandQueue = []
+						self.commandQueue.append(0, 'M0')
+						self.emit(SIGNAL("CommandFailed(PyQt_PyObject)"), command)
                 logger.debug('tick: before final updateStatus')
                 self.updateStatus()
-                logger.debug('tick: after final updateStatus')
         if not status==self.status:   #I don't know why, but != doesn't work
-#            print "Emitting signal"
-#            logger.debug(status.__dict__)
-#            logger.debug(self.status.__dict__)
-#            logger.debug(status==self.status)
-#            logger.debug('tick: about to emit signal=========================')
             self.emit(SIGNAL("statusChanged"), self.status)
                 
                         

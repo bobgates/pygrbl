@@ -24,14 +24,102 @@ import grblserial
 import gc_parser
 
 logger = logging.getLogger('grblserial')
-#hdlr = logging.FileHandler('log_.txt')
-#formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s \n')
-#hdlr.setFormatter(formatter)
-#logger.addHandler(hdlr) 
-#logger.setLevel(logging.DEBUG)
-
 
 __version__ = "0.1.0"
+
+(GE_EMPTY, GE_LOADING, GE_STOPPED, GE_RUNNING, GE_SINGLESTEP) = range(5) 
+
+class gcodeEdit(QTextEdit):
+    '''A class that adds a few methods to QTextEdit to
+       support gcode editing and control of gcode processing.
+    '''
+
+    def __init__(self, parent=None):
+        super(gcodeEdit, self).__init__(parent)
+        self.activeLine = -1
+        self.oldCursorLine = -1
+        self.oldCursorFormat = ''
+        self.connect(self, SIGNAL("cursorPositionChanged()"), self.highlightCursorLine) 
+        self.state = GE_EMPTY
+        
+    def cursorToLine(self, lineNumber):
+        block = self.document().findBlockByNumber(lineNumber-1)  
+        cursor = QTextCursor(block)
+        self.setTextCursor(cursor)
+
+    def getLine(self, lineNumber):
+        block = self.document().findBlockByNumber(lineNumber-1)      
+
+
+    def setState(self, state):
+        self.state = state
+
+    def state(self):
+        return self.state
+
+    def highlightCursorLine(self):
+        if (self.state == GE_EMPTY) or (self.state == GE_RUNNING):
+            return
+        cursor = self.textCursor()
+        cursorLine = cursor.block().blockNumber()+1
+    
+        if self.oldCursorLine == cursorLine:
+            return
+        
+        if self.oldCursorLine>=0:
+            print 'Restoring old cursor'
+            block = self.document().findBlockByNumber(self.oldCursorLine-1)  
+            old_cursor = QTextCursor(block)
+            old_cursor.setBlockFormat(self.oldCursorFormat)
+            
+        cursor = self.textCursor()
+        self.oldCursorFormat = cursor.blockFormat()
+        self.oldCursorLine = cursorLine
+        cursorLineFormat = QTextBlockFormat()
+        cursorLineFormat.setBackground(QColor(Qt.green))
+        print 'Drawing green line'
+        cursor.setBlockFormat(cursorLineFormat)
+
+    def getActiveLine(self):
+        cursor = self.textCursor()
+        return cursor.block().blockNumber()+1 
+        
+    def setActiveLine(self, lineNumber):
+        '''Highlight the line in the text editor that has
+        the line number currently being executed. The line
+        number sent to grbl starts with 1, but corresponds
+        to line 0 in the text editor, hence the -1 in the 
+        calls that set the highlight.
+        
+        In QTextEdit, a block is the same as a \n delimited
+        line, as long as there are no images or tables in 
+        the document.
+        '''
+
+        #unhighlight old block, if it wasn't zero:
+        if lineNumber == self.activeLine:
+            return
+
+        keywordFormat = QTextBlockFormat()
+        if self.activeLine>0:
+            block = self.document().findBlockByNumber(self.activeLine-1) 
+            
+            format = block.blockFormat()
+            format.clearBackground()
+            
+            cursor = QTextCursor(block)
+            cursor.setBlockFormat(format)
+
+        #highlight the new block, if it isn't zero:        
+        self.activeLine = lineNumber
+        if self.activeLine>0:
+            block = self.document().findBlockByNumber(self.activeLine-1)  
+            cursor = QTextCursor(block)
+            keywordFormat.setBackground(Qt.yellow)
+            cursor.setBlockFormat(keywordFormat)
+            self.setTextCursor(cursor)
+            
+        self.getActiveLine()
 
 class MainWindow(QMainWindow):
 
@@ -58,13 +146,12 @@ class MainWindow(QMainWindow):
         
         self.grbl = grblserial.grblSerial()
         self.connect(self.grbl, SIGNAL('statusChanged'), self.updateStatus)
+        self.connect(self.grbl, SIGNAL("CommandFailed(PyQt_PyObject)"), self.commandFailed)
         
         self.timerInterval = 500
         self.timer = QTimer() 
         self.connect(self.timer, SIGNAL("timeout()"), self.grbl.tick) 
         self.timer.start(self.timerInterval);
-        
-        
         
         viewTopAction = self.createAction("&Top", self.viewTop,
                  None, None,
@@ -126,7 +213,7 @@ class MainWindow(QMainWindow):
         font = QFont("Courier", 14)
         font.setFixedPitch(True)
 #Bottom area that contains the text file:
-        self.editor = QTextEdit()
+        self.editor = gcodeEdit()
         self.editor.setFont(font)
         
 # Create the splitters that manage space of all
@@ -226,42 +313,8 @@ class MainWindow(QMainWindow):
 
     def updateStatus(self, status):
         self.gcViewer.setPosition(status)
-        self.highlightLine(status.lineNumber)  #
+        self.editor.setActiveLine(status.lineNumber)
 
-    def highlightLine(self, lineNumber):
-        '''Highlight the line in the text editor that has
-        the line number currently being executed. The line
-        number sent to grbl starts with 1, but corresponds
-        to line 0 in the text editor, hence the -1 in the 
-        calls that set the highlight.
-        
-        In QTextEdit, a block is the same as a \n delimited
-        line, as long as there are no images or tables in 
-        the document.
-        '''
-        if self.activeLine == lineNumber:
-            return
-        keywordFormat = QTextBlockFormat()
-
-        #un-highlight old block, if it wasn't zero:
-        if self.activeLine>0:
-            block = self.editor.document().findBlockByNumber(self.activeLine-1)  
-            #pos = block.position()  
-            cursor = QTextCursor(block)
-            keywordFormat.setBackground(Qt.white)
-            cursor.setBlockFormat(keywordFormat)
-
-        #highlight the new block, if it isn't zero:        
-        self.activeLine = lineNumber
-        if self.activeLine>0:
-            block = self.editor.document().findBlockByNumber(self.activeLine-1)  
-            #pos = block.position()  
-            cursor = QTextCursor(block)
-            keywordFormat.setBackground(Qt.yellow)
-            cursor.setBlockFormat(keywordFormat)
-            self.editor.setTextCursor(cursor)
-
-     
     def playPause(self):
         if self.play:
             self.goPause()
@@ -269,23 +322,44 @@ class MainWindow(QMainWindow):
             self.goPlay()
             
     def goPlay(self):
+        cursorLine = self.editor.getActiveLine()
+        self.editor.setState(GE_RUNNING)
         logger.debug('About to start goPlay()()()()()()()()()()()()()()()()()')
         self.play = True
         self.runPlayPause.setIcon(QIcon('images/media-playback-pause-2.png'))
         block = self.editor.document().begin()
         lineNumber = 1
         while block.isValid(): 
-            self.grbl.queueCommand(str(block.text()), lineNumber=lineNumber)
+            if lineNumber >= cursorLine:
+                self.grbl.queueCommand(str(block.text()), lineNumber=lineNumber)
             block = block.next()   
             lineNumber+=1
         logger.debug('Leaving goPlay()()()()()()()()()()()()()()()()()()()()')
-        self.statusBar().showMessage('Leaving goPlay', 5000)
             
         
     def goPause(self):
+        self.editor.setState(GE_STOPPED)
         self.play = False;
         self.emergencyStop() 
         self.runPlayPause.setIcon(QIcon('images/media-playback-start-2.png'))
+
+    def commandFailed(self, command):
+#       self.emergencyStop()
+# 		if command[0]=='N':
+# 			 i=1
+# 			 while command[i].isdigit():
+# 				 i+=1
+# 			 lineNumber = int(command[1:i])
+#                  
+#               
+#              command = 'N'+str(lineNumber)+command[i:]
+#         
+#         lineNum = command[1:
+
+        QMessageBox.critical(self,
+                             "Error in gcode",
+                             "Error in line: "+str(command),
+                             )
 
     def decFrame(self):
         pass
@@ -323,6 +397,7 @@ class MainWindow(QMainWindow):
         if checkable:
             action.setCheckable(True)
         return action
+        
 #----------------------------------------------------------------------
 # Declan's utility routines
 
@@ -346,29 +421,29 @@ class MainWindow(QMainWindow):
         self.historyText.append(self.commandLine.text())
         self.commandLine.setText('')
     
+
+    def closeEvent(self, event):
+        if self.okToContinue():
+            settings = QSettings()
+            filename = QVariant(QString(self.filename)) \
+                    if self.filename is not None else QVariant()
+            settings.setValue("LastFile", filename)
+            recentFiles = QVariant(self.recentFiles) \
+                    if self.recentFiles else QVariant()
+            settings.setValue("RecentFiles", recentFiles)
+            settings.setValue("MainWindow/Size", QVariant(self.size()))
+            settings.setValue("MainWindow/Position",
+                    QVariant(self.pos()))
+            settings.setValue("MainWindow/State",
+                    QVariant(self.saveState()))
+        else:
+            event.ignore()
 # 
-#     def closeEvent(self, event):
-#         if self.okToContinue():
-#             settings = QSettings()
-#             filename = QVariant(QString(self.filename)) \
-#                     if self.filename is not None else QVariant()
-#             settings.setValue("LastFile", filename)
-#             recentFiles = QVariant(self.recentFiles) \
-#                     if self.recentFiles else QVariant()
-#             settings.setValue("RecentFiles", recentFiles)
-#             settings.setValue("MainWindow/Size", QVariant(self.size()))
-#             settings.setValue("MainWindow/Position",
-#                     QVariant(self.pos()))
-#             settings.setValue("MainWindow/State",
-#                     QVariant(self.saveState()))
-#         else:
-#             event.ignore()
 # 
-# 
-#     def okToContinue(self):
+    def okToContinue(self):
 #         if self.dirty:
 #             reply = QMessageBox.question(self,
-#                             "Image Changer - Unsaved Changes",
+#                             "Pygrbl - Unsaved Changes",
 #                             "Save unsaved changes?",
 #                             QMessageBox.Yes|QMessageBox.No|
 #                             QMessageBox.Cancel)
@@ -376,7 +451,7 @@ class MainWindow(QMainWindow):
 #                 return False
 #             elif reply == QMessageBox.Yes:
 #                 self.fileSave()
-#         return True
+        return True
 # 
 # 
 #     def loadInitialFile(self):
@@ -448,23 +523,7 @@ class MainWindow(QMainWindow):
         if fname:
             self.filename=fname
             self.load()
-    
-    
-#         if not self.okToContinue():
-#             return
-#         dir = os.path.dirname(self.filename) \
-#                 if self.filename is not None else "."
-#         formats = ["*.%s" % unicode(format).lower() \
-#                    for format in QImageReader.supportedImageFormats()]
-#         fname = unicode(QFileDialog.getOpenFileName(self,
-#                             "GCode sequencer - Choose design file", dir,
-#                             "G Code (%s)" % " ".join(formats)))
-#         if fname:
-#             self.loadFile(fname)
-# 
-# 
-#     def loadFile(self, fname=None):
-#       self.
+   
 
     def load(self):
         exception = None
@@ -479,18 +538,17 @@ class MainWindow(QMainWindow):
             self.editor.setLineWrapMode(QTextEdit.NoWrap)
             self.editor.document().setModified(False)
             
-            
-            infile = []
+            # using infile to temporarily store g-code for submission
+            # to gcViewer. I'm sure I could use 
+            file_contents = []
             while not stream.atEnd():
                 a=stream.readLine()
                 self.editor.append(a)
-                infile.append(a)
-            self.gcViewer.setGLList(gc_parser.parse_file(infile))
+                file_contents.append(a)
+            self.editor.cursorToLine(0)
+            self.editor.setState(GE_STOPPED)
+            self.gcViewer.setGLList(gc_parser.parse_file(file_contents))
 
-            
-            
-#            self.setPlainText(stream.readAll())
-#            self.document().setModified(False)
         except (IOError, OSError), e:
             exception = e
         finally:
@@ -549,8 +607,8 @@ class MainWindow(QMainWindow):
                 self.dirty = False
             else:
                 self.updateStatus("Failed to save %s" % self.filename)
-# 
-# 
+
+
     def fileSaveAs(self):
         if self.image.isNull():
             return
@@ -584,58 +642,8 @@ class MainWindow(QMainWindow):
 #                                 size.height())
 #             painter.drawImage(0, 0, self.image)
     def fileQuit(self): 
-        QApplication.closeAllWindows()# 
-# 
-#     def editInvert(self, on):
-#         if self.image.isNull():
-#             return
-#         self.image.invertPixels()
-#         self.showImage()
-#         self.dirty = True
-#         self.updateStatus("Inverted" if on else "Uninverted")
-# 
-# 
-#     def editSwapRedAndBlue(self, on):
-#         if self.image.isNull():
-#             return
-#         self.image = self.image.rgbSwapped()
-#         self.showImage()
-#         self.dirty = True
-#         self.updateStatus("Swapped Red and Blue" \
-#                 if on else "Unswapped Red and Blue")
-# 
-# 
-#     def editUnMirror(self, on):
-#         if self.image.isNull():
-#             return
-#         if self.mirroredhorizontally:
-#             self.editMirrorHorizontal(False)
-#         if self.mirroredvertically:
-#             self.editMirrorVertical(False)
-# 
-# 
-#     def editMirrorHorizontal(self, on):
-#         if self.image.isNull():
-#             return
-#         self.image = self.image.mirrored(True, False)
-#         self.showImage()
-#         self.mirroredhorizontally = not self.mirroredhorizontally
-#         self.dirty = True
-#         self.updateStatus("Mirrored Horizontally" \
-#                 if on else "Unmirrored Horizontally")
-# 
-# 
-#     def editMirrorVertical(self, on):
-#         if self.image.isNull():
-#             return
-#         self.image = self.image.mirrored(False, True)
-#         self.showImage()
-#         self.mirroredvertically = not self.mirroredvertically
-#         self.dirty = True
-#         self.updateStatus("Mirrored Vertically" \
-#                 if on else "Unmirrored Vertically")
-# 
-# 
+        self.close()   
+ 
 #     def editZoom(self):
 #         if self.image.isNull():
 #             return
@@ -644,24 +652,11 @@ class MainWindow(QMainWindow):
 #                 self.zoomSpinBox.value(), 1, 400)
 #         if ok:
 #             self.zoomSpinBox.setValue(percent)
-# 
-# 
-#     def showImage(self, percent=None):
-#         if self.image.isNull():
-#             return
-#         if percent is None:
-#             percent = self.zoomSpinBox.value()
-#         factor = percent / 100.0
-#         width = self.image.width() * factor
-#         height = self.image.height() * factor
-#         image = self.image.scaled(width, height, Qt.KeepAspectRatio)
-#         self.imageLabel.setPixmap(QPixmap.fromImage(image))
-# 
-# 
+ 
     def helpAbout(self):
         QMessageBox.about(self, "About PyGrbl",
                 """<b>PyGrbl</b> v %s
-                <p>Copyright &copy; 2010 bobgates Ltd. 
+                <p>Copyright &copy; 2010 bobgates 
                 All rights reserved.
                 <p>This application sequences g-code files for
                 the grbl application running on Arduino that runs
@@ -684,7 +679,7 @@ def main():
     app.setWindowIcon(QIcon(":/icon.png"))
     form = MainWindow()
     form.show()
-    app.exec_()
+    sys.exit(app.exec_())
 
 
 main()
