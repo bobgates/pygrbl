@@ -7,6 +7,15 @@ from PyQGLViewer import *
 from qgllogo import *
 import OpenGL.GL as ogl
 import math
+#import grblserial
+import logging
+logger = logging.getLogger('grblserial')
+hdlr = logging.FileHandler('log_.txt')
+formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
+hdlr.setFormatter(formatter)
+logger.addHandler(hdlr) 
+logger.setLevel(logging.DEBUG)
+
 
 
 int_words = ['N', 'G', 'M', 'T']
@@ -73,6 +82,9 @@ current_state = state()
 #-------------------------------------------------------------------------------------------                
 
 def go(motion, start, finish, lineNum):
+    ''' Takes a type of motion, with start and finish
+    and creates a structure with drawing commands in it.
+    '''
 
     if motion == 'G0':
         type = 'Fast line'
@@ -109,6 +121,10 @@ def go(motion, start, finish, lineNum):
                 fy = float(finish.y)
                 fz = float(finish.z)
 
+                arc_length = math.sqrt((sx-fx)**2 + (sy-fy)**2 + (sz-fz)**2)
+                if arc_length < 0.0001:
+                    return []
+
                 centrex = sx + i
                 centrey = sy + j
 
@@ -121,13 +137,17 @@ def go(motion, start, finish, lineNum):
                 r = math.sqrt(sdx**2 + sdy**2)        
                 fr = math.sqrt(fdx**2 + fdy**2)        
                 
-                #print 'centre', centrex, centrey, 'start', sx, sy, sz, 'finish', fx,fy, fz, 'rs',r,fr
+                logger.debug('Line number is ' + str(lineNum))
+                logger.debug('centre: %f, %f, start: %f,%f,%f,  finish: %f, %f, %f,  rs: %f, %f' % (centrex, centrey, sx, sy, sz, fx,fy, fz, r,fr))
                 
                 if (fr/r-1.0)>1e-4:         #1e-4 is tolerance. Too small doesn't work
                     raise Exception('Centre given by I, J isn''t at equal radius to start and finish')
                 
                 sangle = math.atan2(sdy, sdx)
                 fangle = math.atan2(fdy, fdx)
+                
+                logger.debug('sangle: '+str(sangle)+' fangle: '+str(fangle))
+                
                 if motion == 'G2':
                     result = 2.0
                     dangle = -2*math.sin(CURVE_RESOLUTION/2/r)
@@ -140,7 +160,13 @@ def go(motion, start, finish, lineNum):
                 
                 if angle<-math.pi:
                     angle += 2*math.pi
+                    
+                if angle>math.pi:
+                    angle -= math.pi
                 
+                
+                logger.debug('In go(motion), r is %f, angle is %f and dangle is %f' % (r, angle, dangle))
+                                
                 n = abs(angle/dangle)
                 dz = (fz-sz)/n      
                 n = int(n)
@@ -184,12 +210,17 @@ def update_position(position, segs):
         
 #-------------------------------------------------------------------------------------------                
 def parse_file(file):
+    '''Takes a g-code file and compiles
+    it into a draw list
+    '''	
 
     current_position = coord()
     new_position = coord()
     gl_list=[]
 
     #file = open('cncweb.txt')
+    
+    #print len(file)
     
     for lineNum, qline in enumerate(file):
         line = str(qline)
@@ -210,9 +241,7 @@ def parse_file(file):
         # Remove ; comments
         if ';' in line:
             line = line[:line.find(';')]
-                
-        #print line
-    
+        
         if not line:
             continue
     
@@ -244,7 +273,7 @@ def parse_file(file):
             else:
                 commands.append(seg[0])
                 
-        # Comes out of here with segs holding a structure with [[cmd, var], cmd, etc
+        # Gets here with segs holding a structure with [[cmd, var], cmd, etc
         # where either an entry contains a single command, or a command with its variable
         # There's also a commands array that just contains the commands, because it
         # is useful in the validity checking that follows.
@@ -296,7 +325,8 @@ def parse_file(file):
             
             list = go(current_state.motion, current_position, new_position, lineNum)
             
-            gl_list.append(list)
+            if list:
+            	gl_list.append(list)
             current_position = copy.deepcopy(new_position)
             
     return gl_list          
@@ -304,6 +334,9 @@ def parse_file(file):
 #-------------------------------------------------------------------------------------------                
 
 def draw_position(pos):
+    '''Draws a cone pointing down in Z
+    that has its tip at pos
+    '''
     NO_SEGS=20
     DIAMETER=4.0
     CONE_HEIGHT=4.0
@@ -477,6 +510,7 @@ class gcViewer(QGLViewer):
         self.radius = 0.0
         self.selected = -1.0
         self.position = [0.0, 0.0, 0.0]
+        self.countdown = 0.0
         
         self.orig= Vec()
         self.dir= Vec()
@@ -495,6 +529,7 @@ class gcViewer(QGLViewer):
         self.position[0]=status.x
         self.position[1]=status.y
         self.position[2]=status.z
+        self.countdown = status.countdown
         self.draw()
         self.updateGL()
         
@@ -606,12 +641,12 @@ class gcViewer(QGLViewer):
         self.drawText(10, 120, 
                       'Z: %.2f' % self.position[2], 
                       self.coordFont)
-                      
-                      
-                      
-                      
-        #QMessageBox.information(self, "In draw","In draw routine")
+        if self.countdown>0.0:
+            self.drawText(250, 40, 
+                          'Wait: %.1f s' % self.countdown, 
+                           self.coordFont)
         #print self.camera().upVector()
+
 
     def drawWithNames(self):
         if self.drawing:
@@ -653,6 +688,7 @@ class temp():
    x=0.0
    y=0.0
    z=0.0
+   countdown=0.0
 
 
 def main():
@@ -677,6 +713,12 @@ def main():
     viewer.show()
     qapp.exec_()
 
+if __name__ == '__main__':
+
+    app = QtGui.QApplication(sys.argv)
+    mainWin = MainWindow()
+    mainWin.show()
+    sys.exit(app.exec_())    
 
 if __name__ == '__main__':
     main()
