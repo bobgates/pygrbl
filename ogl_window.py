@@ -44,6 +44,7 @@
 
 import sys
 import math
+import copy
 
 from PyQt4 import QtCore, QtGui, QtOpenGL
 
@@ -78,9 +79,6 @@ class GLWidget(QtOpenGL.QGLWidget):
 	def __init__(self, parent=None):
 		super(GLWidget, self).__init__(parent)
 
-		self.gear1 = 0
-		self.gear2 = 0
-		self.gear3 = 0
 		self.cursor = 0
 		self.drawList = 0
 		
@@ -99,10 +97,10 @@ class GLWidget(QtOpenGL.QGLWidget):
 		self.xOffset = 0.0
 		self.yOffset = 0.0
 		self.zOffset = 0.0
+		self.radius = 0.0
+		self.centre = [0.,0.,0.]
 		self.translate = -80
 		
-		self.gear1Rot = 0
-
 		self.coordFont = QtGui.QFont()
 		self.coordFont.setPointSize(36)
 		self.mouseFont = QtGui.QFont()
@@ -130,9 +128,10 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 	def __del__(self):
 		self.makeCurrent()
-		glDeleteLists(self.gear1, 1)
-		glDeleteLists(self.gear2, 1)
-		glDeleteLists(self.gear3, 1)
+		if self.cursor:
+			glDeleteLists(self.cursor, 1)
+		if self.drawList:
+			glDeleteLists(self.drawList, 1)
 
 	def setPosition(self, status):
 		#print "in setPosition, y=",status.y
@@ -169,31 +168,33 @@ class GLWidget(QtOpenGL.QGLWidget):
 			
 	def setXOffset(self, Offset):
 		if Offset != self.xOffset:
-			print 'x Offset: ', Offset
+			# print 'glViewer: x Offset: ', Offset
 			self.xOffset = Offset
 			self.xOffsetChanged.emit(Offset)
 			self.updateGL()
 
 	def setYOffset(self, Offset):
 		if Offset != self.yOffset:
-			print 'y Offset: ', Offset
+			# print 'glViewer: y Offset: ', Offset
 			self.yOffset = Offset
 			self.yOffsetChanged.emit(Offset)
 			self.updateGL()
 
 	def setZOffset(self, Offset):
 		if Offset != self.zOffset:
-			print 'z Offset: ', Offset
+			# print 'glViewer: z Offset: ', Offset
 			self.zOffset = Offset
 			self.zOffsetChanged.emit(Offset)
 			self.updateGL()
 			
 	def setRadius(self, radius):
-		radius *= 1.3333
+		# print 'glWidget: setradius: ', radius
+		radius = radius * 1.5
 		self.m_d_left_plane = -radius/2.0
 		self.m_d_width = radius
-		self.m_d_bottom_plane = -radius/2.0
+		self.m_d_bottom_plane = - radius/2.0
 		self.m_d_height = radius
+		self.updateGL()
 		
 
 	def initializeGL(self):
@@ -207,9 +208,6 @@ class GLWidget(QtOpenGL.QGLWidget):
 		glEnable(GL_LIGHT0)
 		glEnable(GL_DEPTH_TEST)
 
-		# self.gear1 = self.makeGear(reflectance1, 1.0, 4.0, 1.0, 0.7, 20)
-		# self.gear2 = self.makeGear(reflectance2, 0.5, 2.0, 2.0, 0.7, 10)
-		# self.gear3 = self.makeGear(reflectance3, 1.3, 2.0, 0.5, 0.7, 10)
 		self.cursor = self.makePos(reflectance3)
 		self.pos = [0,0,0]
 
@@ -218,8 +216,8 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 	def drawText(self):
 		glColor3f(0.2, 0.2, 0.2)
-		self.renderText(10, 40, 'X: %.2f' % self.pos[0], self.coordFont)
-		self.renderText(10, 80, 'Y: %.2f' % self.pos[1], self.coordFont)
+		self.renderText(10, 40,	 'X: %.2f' % self.pos[0], self.coordFont)
+		self.renderText(10, 80,	 'Y: %.2f' % self.pos[1], self.coordFont)
 		self.renderText(10, 120, 'Z: %.2f' % self.pos[2], self.coordFont)
 		
 		if self.countdown>0:
@@ -237,38 +235,17 @@ class GLWidget(QtOpenGL.QGLWidget):
 			self.renderText(xmax - 60, ymax ,'		  ', self.mouseFont)
 			
 	def setLimits(self, centre, radius):
-		self.setXOffset(centre[0])
-		self.setYOffset(centre[1])
-		self.setZOffset(centre[2])
+		self.centre = copy.copy(centre)
+		self.radius = radius
+		self.setXOffset(-centre[0])
+		self.setYOffset(-centre[1])
+		self.setZOffset(-centre[2])
 		self.setRadius(radius)
-		print 'In setLimits'
-		return	
-		
-		# for i in range(3):
-		#	offset = centre[i]
-		#	if i==0:
-		#		slider = self.xOffsetSlider
-		#	elif i==1:
-		#		slider = self.yOffsetSlider
-		#	else:
-		#		slider = self.zOffsetSlider
-		#	if offset>1:
-		#		slider.setMaximum(0)
-		#		slider.setMinimum(-offset*2)
-		#		slider.setValue(-offset)
-		#	elif offset<-1:
-		#		slider.setMinimum(0)
-		#		slider.setMaximum(-offset*2)
-		#		slider.setValue(-offset)
-		#	else:
-		#		slider.setMinimum(-1)
-		#		slider.setMaximum(1)
-		#		slider.setValue(-offset)
-		# self.setRadius(radius)
-			
+		self.resizeGL(self.width(), self.height())
+		# print 'In setLimits  *************************'
 
 	def paintGL(self):
-		print 'In paintGL',
+		#print 'In paintGL',
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 		glPushMatrix()
@@ -280,12 +257,8 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 		self.drawCursor(self.pos[0], self.pos[1], self.pos[2])
 
-
-
 		if self.drawList:
 			self.drawDrawList(self.pos[0], self.pos[1], self.pos[2])
-		# else:
-		# 	print 'Nothing in draw list'
 
 		glPopMatrix()
 		self.drawText()
@@ -302,6 +275,16 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 		glMatrixMode(GL_PROJECTION)
 		glLoadIdentity();
+		
+		
+		# print 'Resizing'
+		# print 'Aspect ratio is: %.2f' % (self.aspect_ratio)
+		# print 'left plane: %.2f, width: %.2f, aspect width: %.2f' % (self.m_d_left_plane, self.m_d_width, self.m_d_width*self.aspect_ratio)
+		# print 'bottom plane: %.2f, height: %.2f' % (self.m_d_bottom_plane, self.m_d_height)
+		# print 'near plane: %.2f, far plane: %.2f' % (self.m_d_near_plane, self.m_d_far_plane)
+		# print 'Midpoints: xOffset: %.2f, yOffset: %.2f' % (-self.xOffset, -self.yOffset)
+		# print
+		
 		if self.usePerspective:
 			glFrustum(self.m_d_left_plane*self.aspect_ratio, (self.m_d_left_plane + self.m_d_width)*self.aspect_ratio,
 					  self.m_d_bottom_plane, (self.m_d_bottom_plane + self.m_d_height),
@@ -340,7 +323,6 @@ class GLWidget(QtOpenGL.QGLWidget):
 			self.zoomIn()
 		else:
 			self.zoomOut()
-		
 
 	def mousePressEvent(self, event):
 		self.lastPos = event.pos()
@@ -354,10 +336,10 @@ class GLWidget(QtOpenGL.QGLWidget):
 			dy = event.y() - self.lastPos.y()
 		
 		if not(event.buttons()):
-			self.mousePos[0] = (float(event.x())/self.width()  - 0.5) * self.m_d_width*self.aspect_ratio \
-								- self.xOffset
-			self.mousePos[1] = - (float(event.y())/self.height() - 0.5) * self.m_d_height + \
-							   - self.yOffset
+			self.mousePos[0] = float(event.x())/self.width() * self.m_d_width *self.aspect_ratio \
+								+ self.m_d_left_plane * self.aspect_ratio - self.xOffset
+			self.mousePos[1] = ((self.height() - float(event.y()))/self.height() ) * self.m_d_height + \
+								self.m_d_bottom_plane - self.yOffset
 			self.showMouse = True
 			self.updateGL()
 		else:
@@ -410,6 +392,8 @@ class GLWidget(QtOpenGL.QGLWidget):
 
 		for item in gl_list:
 			# print item
+			
+			glBegin(GL_LINES)
 			if len(item)==1:
 				line=item[0]
 				# if pushNames:
@@ -417,11 +401,9 @@ class GLWidget(QtOpenGL.QGLWidget):
 				#	glPushName(line[1])
 				#	#print line[1]
 				#	#assert(False)
-				glBegin(GL_LINES)
 				self.colorRule(line[0])
 				glVertex3f(line[2], line[3], line[4])
 				glVertex3f(line[5], line[6], line[7])
-				glEnd()
 				# if pushNames:
 				#	glPopName()
 				#	glPopMatrix()	 
@@ -429,17 +411,16 @@ class GLWidget(QtOpenGL.QGLWidget):
 				# if pushNames:
 				#	glPushMatrix()
 				#	glPushName(item[1])
-				glBegin(GL_LINE_STRIP)
-				self.colorRule(line[0])
+				self.colorRule(item[0])
 				for line in item[2:]:
 					glVertex3f(line[0], line[1], line[2])
-				glEnd()
+			glEnd()
 				# if pushNames:
 				#	glPopName()
 				#	glPopMatrix()	 
 		glEndList()
 		self.drawList = list
-		print 'Drawlist created in initDrawList: ', list
+		# print 'Drawlist created in initDrawList: ', list
 
 	def xRotation(self):
 		return self.xRot
@@ -532,64 +513,41 @@ class GLWidget(QtOpenGL.QGLWidget):
 			angle -= 360 * 16
 
 	def setTopView(self):	
-		self.xrot = 0.
-		self.yrot = 0.
-		self.zrot = 0.
-		# self.xRotationChanged.emit(angle)
-		self.updateGL()
-	
-		# self.xRotationChanged.emit(0.)
-		# self.yRotationChanged.emit(0.)
-		# self.zRotationChanged.emit(0.)
-		# self.updateGL()
-		print 'glWidget::setTopView'
+		self.setXRotation(0.)
+		self.setYRotation(0.)
+		self.setZRotation(0.)
 		
 	def setTopRotView(self):
 		self.setXRotation(0.)
 		self.setYRotation(0.)
 		self.setZRotation(90.*16)
-		# 	self.normalizeAngle(angle)
-		# 
-		# 	if angle != self.xRot:
-		# 		self.xRot = angle
-		# 		self.xRotationChanged.emit(angle)
-		# 		self.updateGL()
-		# 
-		# self.xRotationChanged.emit(0.)
-		# self.yRotationChanged.emit(0.)
-		# self.zRotationChanged.emit(90.*16)
-		# self.updateGL()
 	
 	def setLeftView(self):	
 		self.setXRotation(270.*16)
 		self.setYRotation(0.)
 		self.setZRotation(90.*16)
-		# self.xRotationChanged.emit(270.*16)
-		# self.yRotationChanged.emit(0.)
-		# self.zRotationChanged.emit(90.*16)
-		# self.updateGL()
 
 	def setFrontView(self): 
 		self.setXRotation(270.*16)
 		self.setYRotation(0.)
 		self.setZRotation(0.)
-		# self.xRotationChanged.emit(270.*16)
-		# self.yRotationChanged.emit(0.)
-		# self.zRotationChanged.emit(0.)
-		# self.updateGL()
-		print 'glWidget::setFrontView'
 
 	def setIsoView(self):	
 		self.setXRotation((360.-45)*16)
 		self.setYRotation(0.)
 		self.setZRotation(45.*16)
-		# self.xRotationChanged.emit((360.-45)*16)
-		# self.yRotationChanged.emit(0.)
-		# self.zRotationChanged.emit(45.*16)
-		# print 'glWidget::setIsoView'
-		# self.updateGL()
 
-
+	def resetLimits(self):
+		# print 'In reset limits'
+		# print 'Centre: %.2f, %.2f, %2.f' % (self.centre[0], self.centre[1], self.centre[2])
+		# print 'Radius: %.2f' % (self.radius)
+		self.setXOffset(-self.centre[0])
+		self.setYOffset(-self.centre[1])
+		self.setZOffset(-self.centre[2])
+		self.setRadius(self.radius)
+		self.resizeGL(self.width(), self.height())
+		
+		
 
 
 class MainWindow(QtGui.QMainWindow):
@@ -660,6 +618,10 @@ class MainWindow(QtGui.QMainWindow):
 		buttonLayout.addWidget(self.perspectiveButton)
 		self.connect(self.perspectiveButton, QtCore.SIGNAL('clicked()'), self.setPerspective)
 
+		self.resetViewButton = QtGui.QPushButton('Reset')
+		buttonLayout.addWidget(self.resetViewButton)
+		self.connect(self.resetViewButton, QtCore.SIGNAL('clicked()'), self.glWidget.resetLimits)
+
 		self.createActions()
 		self.createMenus()
 
@@ -692,19 +654,19 @@ class MainWindow(QtGui.QMainWindow):
 			self.glWidget.usePerspective = False
 		self.glWidget.resizeGL(self.width(), self.height())
 
-	def renderIntoPixmap(self):
-		size = self.getSize()
-
-		if size.isValid():
-			pixmap = self.glWidget.renderPixmap(size.width(), size.height())
-			self.setPixmap(pixmap)
-
-	def grabFrameBuffer(self):
-		image = self.glWidget.grabFrameBuffer()
-		self.setPixmap(QtGui.QPixmap.fromImage(image))
-
-	def clearPixmap(self):
-		self.setPixmap(QtGui.QPixmap())
+	# def renderIntoPixmap(self):
+	#	size = self.getSize()
+	# 
+	#	if size.isValid():
+	#		pixmap = self.glWidget.renderPixmap(size.width(), size.height())
+	#		self.setPixmap(pixmap)
+	# 
+	# def grabFrameBuffer(self):
+	#	image = self.glWidget.grabFrameBuffer()
+	#	self.setPixmap(QtGui.QPixmap.fromImage(image))
+	# 
+	# def clearPixmap(self):
+	#	self.setPixmap(QtGui.QPixmap())
 
 	def about(self):
 		QtGui.QMessageBox.about(self, "About Grabber",
@@ -712,28 +674,28 @@ class MainWindow(QtGui.QMainWindow):
 				"rendering OpenGL into a Qt pixmap.")
 
 	def createActions(self):
-		self.renderIntoPixmapAct = QtGui.QAction("&Render into Pixmap...",
-				self, shortcut="Ctrl+R", triggered=self.renderIntoPixmap)
-
-		self.grabFrameBufferAct = QtGui.QAction("&Grab Frame Buffer", self,
-				shortcut="Ctrl+G", triggered=self.grabFrameBuffer)
-
-		self.clearPixmapAct = QtGui.QAction("&Clear Pixmap", self,
-				shortcut="Ctrl+L", triggered=self.clearPixmap)
-
+	#	self.renderIntoPixmapAct = QtGui.QAction("&Render into Pixmap...",
+	#			self, shortcut="Ctrl+R", triggered=self.renderIntoPixmap)
+	# 
+	#	self.grabFrameBufferAct = QtGui.QAction("&Grab Frame Buffer", self,
+	#			shortcut="Ctrl+G", triggered=self.grabFrameBuffer)
+	# 
+	#	self.clearPixmapAct = QtGui.QAction("&Clear Pixmap", self,
+	#			shortcut="Ctrl+L", triggered=self.clearPixmap)
+	# 
 		self.exitAct = QtGui.QAction("E&xit", self, shortcut="Ctrl+Q",
 				triggered=self.close)
-
+	
 		self.aboutAct = QtGui.QAction("&About", self, triggered=self.about)
-
+	
 		self.aboutQtAct = QtGui.QAction("About &Qt", self,
 				triggered=QtGui.qApp.aboutQt)
 
 	def createMenus(self):
 		self.fileMenu = self.menuBar().addMenu("&File")
-		self.fileMenu.addAction(self.renderIntoPixmapAct)
-		self.fileMenu.addAction(self.grabFrameBufferAct)
-		self.fileMenu.addAction(self.clearPixmapAct)
+		# self.fileMenu.addAction(self.renderIntoPixmapAct)
+		# self.fileMenu.addAction(self.grabFrameBufferAct)
+		# self.fileMenu.addAction(self.clearPixmapAct)
 		self.fileMenu.addSeparator()
 		self.fileMenu.addAction(self.exitAct)
 
@@ -779,7 +741,8 @@ class MainWindow(QtGui.QMainWindow):
 				slider.setMinimum(-1)
 				slider.setMaximum(1)
 				slider.setValue(-offset)
-		self.glWidget.setRadius(radius)
+		self.glWidget.setLimits(centre, radius)
+		# print 'Mainwin: setLimits'
 
 if __name__ == '__main__':
 
@@ -787,15 +750,15 @@ if __name__ == '__main__':
 	parser.load('cncweb.txt')
 	center, radius =  parser.getGLLimits(parser.gl_list)
 
-	print 'Center: ', center
-	print 'Radius: ', radius
+	# print 'Center: ', center
+	# print 'Radius: ', radius
 
 	app = QtGui.QApplication(sys.argv)
 	mainWin = MainWindow()
 	mainWin.initDrawList(parser.gl_list)
 	mainWin.glWidget.setTopView()
 	
-	mainWin.setLimits(center, radius)
+	mainWin.glWidget.setLimits(center, radius)
 	mainWin.show()
 	
 	sys.exit(app.exec_())	 
