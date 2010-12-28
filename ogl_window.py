@@ -438,10 +438,10 @@ class GLWidget(QtOpenGL.QGLWidget):
 		glPopMatrix()
 
 	def drawDrawList(self, dx, dy, dz):
-		glPushMatrix()
-		glTranslated(dx, dy, dz)
+#		glPushMatrix()
+#		glTranslated(dx, dy, dz)
 		glCallList(self.drawList)
-		glPopMatrix()
+#		glPopMatrix()
 
 	def makePos(self, reflectance):
 		NO_SEGS=20

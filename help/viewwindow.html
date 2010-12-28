@@ -1,0 +1,56 @@
+<!--
+To change this template, choose Tools | Templates
+and open the template in the editor.
+-->
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+    <title>Using the View window</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=MacRoman">
+  </head>
+  <body>
+	  <p>The view window shows the g-code file in 3D form. </p>
+
+	<h1>Manipulating the view menu</h1>
+	Simple manipulation is
+	available using the mouse:
+	<ul>
+	<li>Left button: rotate in X and Y directions by clicking and dragging. 
+	Rotation around the z-axis is not available. 
+	<li>Right button: click and drag to move the centre of the view.
+	<li>Scroll button: zoom in and out.
+	</ul>
+
+	<p>A number of preset views can be selected using the icons below the
+	3D viewer area. There are two top views, with the long axis aligned
+	horizontally or vertically. There are also views from the left side,
+	and the front, and an isometric view of the model.
+	</p>
+	<p>
+	To reset the view, use the rightmost icon that looks like a snow
+    flake. It will set the view to its default position and zoom, usually
+    centering it while filling the view window.
+	</p>
+
+	<h2>Mouse coordinate display</h2>
+	<p>In the bottom right hand corner, the mouse coordinates are
+	displayed. This can be useful for checking dimensions. Coordinates
+	are only strictly valid in the default top view, where they match
+	the x and y coordinates of the model. In other views, they are
+	probably wrong.
+
+	<h2>Coordinates and wait display</h2>
+	<p>Overlayed on the 3D viewer are the 3D coordinates currently being
+    reported by the milling machine, via Grbl. If the machine is in a
+	dwell, the time left in the dwell in seconds is also displayed.
+	</p>
+	<p>The position of the milling cutter is also indicated by a
+	stylized triangular cutter, which moves over the g-code
+	visualization, keeping track of current position. If the cursor
+	moves away from lines, it is likely to be cutting in the wrong
+	place.
+	</p>
+
+
+  </body>
+</html>

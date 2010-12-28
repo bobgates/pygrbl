@@ -19,6 +19,7 @@ import logging
 #import helpform
 #import newimagedlg
 
+import commandwidget
 import helpform
 import qrc_resources
 import grblserial
@@ -31,26 +32,27 @@ logger = logging.getLogger('grblserial')
 __version__ = "0.1.0"
 
 (GE_EMPTY, GE_LOADING, GE_STOPPED, GE_RUNNING, GE_SINGLESTEP) = range(5) 
-
+(MODE_JOG, MODE_MANUAL, MODE_AUTO) = range(3)
 
 #***********************************************************************************
 class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
-        
+
         #State:
         self.recentFiles = []
-        self.activeLine =-1
-        self.filename = 'cncweb.txt'
-        self.play=False
+        self.activeLine = -1
+        self.filename = 'gcode files/cncweb.txt'
+        self.play = False
+        self.machineRunning = True
 
         # Create the right hand widget, give it a layout
         # and put the viewer and the geometry/view controls into it.
         rwidget = QWidget()
         rlayout = QVBoxLayout(rwidget)
         self.gcViewer = ogl_window.GLWidget()#twidget)
-        
+
         self.glWidgetArea = QScrollArea()
         self.glWidgetArea.setWidget(self.gcViewer)
         self.glWidgetArea.setWidgetResizable(True)
@@ -62,199 +64,156 @@ class MainWindow(QMainWindow):
         # Load a default file for debugging purposes:
         parser = gcParser()
         parser.load(self.filename)
-        center, radius =  parser.getGLLimits(parser.gl_list)
+        center, radius = parser.getGLLimits(parser.gl_list)
         self.gcViewer.initDrawList(parser.gl_list)
-#       print 'In pygrbl main, center: ', center, ', radius %.3f' % (radius,)
+        #       print 'In pygrbl main, center: ', center, ', radius %.3f' % (radius,)
         self.gcViewer.setLimits(center, radius)
         self.gcViewer.setTopView()
         # self.gcViewer.resizeGL(self.gcViewer.width(), self.gcViewer.height())
         # self.gcViewer.setMinimumSize(300, 300)
         # self.gcViewer.setContextMenuPolicy(Qt.ActionsContextMenu)
-        
+
         self.grbl = grblserial.grblSerial()
         self.connect(self.grbl, SIGNAL('statusChanged'), self.updateStatus)
         self.connect(self.grbl, SIGNAL("CommandFailed(PyQt_PyObject)"), self.commandFailed)
-        
-        self.timerInterval = 500
-        self.timer = QTimer() 
-        self.connect(self.timer, SIGNAL("timeout()"), self.grbl.tick) 
-        self.timer.start(self.timerInterval);
-        
-        viewTopAction = self.createAction("&Top", self.gcViewer.setTopView,
-                 None, 'projection_top',
-                 "View simulation from top")
-        viewTopRotAction = self.createAction("Top &Right", self.gcViewer.setTopRotView,
-                 None, 'projection_toprot',
-                 "View simulation from top rotated")
-        viewFrontAction = self.createAction("&Front", self.gcViewer.setFrontView,
-                 None, 'projection_front',
-                 "View simulation from front")
-        viewLeftAction = self.createAction("&Front", self.gcViewer.setLeftView,
-                 None, 'projection_left',
-                 "View simulation from left")
-        viewIsoAction = self.createAction("&Iso", self.gcViewer.setIsoView,
-                 None, 'projection_iso',
-                 "View simulation in isometric form")
 
-        viewerToolbar = QToolBar("Views")
-        viewerToolbar.setObjectName("ViewerToolBar")
-        viewerToolbar.addAction(viewTopAction)
-        viewerToolbar.addAction(viewTopRotAction)
-        viewerToolbar.addAction(viewFrontAction)
-        viewerToolbar.addAction(viewLeftAction)
-        viewerToolbar.addAction(viewIsoAction)
-        viewerToolbar.addSeparator()
+        self.timerInterval = 200
+        self.timer = QTimer()
+        self.connect(self.timer, SIGNAL("timeout()"), self.grbl.tick)
+        self.timer.start(self.timerInterval);
+
         
         rlayout.addWidget(self.glWidgetArea)
-        rlayout.addWidget(viewerToolbar)
+        rlayout.addWidget(self.createViewerToolbar())
         
 # Create a left hand TAB widget that contains controls 
 # and editing stuff
 
-# Code entry page:
-
-        self.codeEntryPage=QWidget()
-        self.cepLayout = QVBoxLayout(self.codeEntryPage)
-        historyLabel = QLabel("History:")
-        self.historyText = QTextEdit()
-        self.cepLayout.addWidget(historyLabel)
-        self.cepLayout.addWidget(self.historyText)
-        
-        commandLabel = QLabel("Command:")
-        self.commandLayout = QHBoxLayout()
-        self.commandLine = QLineEdit()
-        self.goButton =  QPushButton("Go")
-        self.connect(self.goButton, SIGNAL('clicked()'), self.goOneLine)
-
-        self.commandLayout.addWidget(self.commandLine)
-        self.commandLayout.addWidget(self.goButton)
-        
-        self.cepLayout.addWidget(commandLabel)
-        self.cepLayout.addLayout(self.commandLayout)
+        self.codeEntryPage = commandwidget.CommandWidget()
+        self.connect(self.codeEntryPage, SIGNAL('goCommand'), self.goOneLine)
 
 
         self.Tabs = QTabWidget()
-        self.Tabs.addTab(self.codeEntryPage, "Code Entry (F5)")
+        self.Tabs.addTab(self.codeEntryPage, "Manual (F5)")
 
-#Control page:
+    #Control page:
         self.controlPage = QWidget()
         self.controlLayout = QVBoxLayout(self.controlPage)
         clabel = QLabel("My controls")
         self.controlLayout.addWidget(clabel)
-        
-        
-        self.Tabs.insertTab(0,self.controlPage, "Manual Control (F3)")
 
+
+        self.Tabs.insertTab(0, self.controlPage, "Jog (F3)")
 
         font = QFont("Courier", 14)
         font.setFixedPitch(True)
-#Bottom area that contains the text file:
+
+    #Bottom area that contains the text file:
         self.editor = gcodeEdit()
         self.editor.setFont(font)
-        
-# Create the splitters that manage space of all
-# the sub places        
+
+        self.Tabs.addTab(self.editor, "Program (F7)")
+        self.Tabs.setCurrentWidget(self.editor)
+
+    # Create the splitters that manage space of all
+    # the sub places
         
         self.leftrightSplit = QSplitter()
         self.leftrightSplit.addWidget(self.Tabs)
         self.leftrightSplit.addWidget(rwidget)
-        self.mainsplit = QSplitter(Qt.Vertical)
-        self.mainsplit.addWidget(self.leftrightSplit)
-        self.mainsplit.addWidget(self.editor)
-        self.setCentralWidget(self.mainsplit)
+#        self.mainsplit = QSplitter(Qt.Vertical)
+#        self.mainsplit.addWidget(self.leftrightSplit)
+#        self.mainsplit.addWidget(self.editor)
+#        self.setCentralWidget(self.mainsplit)
+        self.setCentralWidget(self.leftrightSplit)
 
         self.printer = None
 
 #Stuff across the bottom
         self.sizeLabel = QLabel()
-        self.sizeLabel.setFrameStyle(QFrame.StyledPanel|QFrame.Sunken)
+        self.sizeLabel.setFrameStyle(QFrame.StyledPanel | QFrame.Sunken)
         self.sizeLabel.setAlignment(Qt.AlignLeft)
         status = self.statusBar()
         status.setSizeGripEnabled(False)
         status.addPermanentWidget(self.sizeLabel)
         status.showMessage("Ready", 5000)
-        
-        self.progress = QProgressBar()
-        self.progress.setAlignment(Qt.AlignRight)
-        self.progress.setMinimum(0)
-        self.progress.setMaximum(80)
-        self.progress.setValue(80)
-         
-        status.addPermanentWidget(self.progress)
-        
+
+#        self.progress = QProgressBar()
+#        self.progress.setAlignment(Qt.AlignRight)
+#        self.progress.setMinimum(0)
+#        self.progress.setMaximum(80)
+#        self.progress.setValue(40)
+#        status.addPermanentWidget(self.progress)
+
         self.sizeLabel.setText('Label')
-#         fileNewAction = self.createAction("&New...", self.fileNew,
-#                 QKeySequence.New, "filenew", "Create an image file")
         fileOpenAction = self.createAction("&Open...", self.fileOpen,
-                 QKeySequence.Open, "fileopen",
-                 "Open an existing G-code file")
+                                           QKeySequence.Open, "fileopen",
+                                           "Open an existing G-code file")
         fileSaveAction = self.createAction("&Save", self.fileSave,
-                QKeySequence.Save, "filesave", "Save the gcode file")
+                                           QKeySequence.Save, "filesave", "Save the gcode file")
         fileSaveAsAction = self.createAction("Save &As...",
-                self.fileSaveAs, icon="filesaveas",
-                tip="Save the gcode file using a new name")
-#         filePrintAction = self.createAction("&Print", self.filePrint,
-#                 QKeySequence.Print, "fileprint", "Print the image")
-        fileQuitAction = self.createAction("&Quit", 
-                self.fileQuit,
-                 "Ctrl+Q", "filequit", "Close the application")
+                                             self.fileSaveAs, icon="filesaveas",
+                                             tip="Save the gcode file using a new name")
+        fileQuitAction = self.createAction("&Quit",
+                                           self.fileQuit,
+                                           "Ctrl+Q", "system-exit", "Close the application")
         fileQuitAction.MenuRole = QAction.QuitRole
         fileMenu = self.menuBar().addMenu("&File")
-        self.addActions(fileMenu, (fileOpenAction, fileSaveAction))#, 
-                                   #None, fileSaveAsAction, fileQuitAction))
+        self.addActions(fileMenu, (fileOpenAction, fileSaveAction, None, fileQuitAction))
 
-        emergencyStopAction = self.createAction("&Stop", 
-                self.emergencyStop,
-                 "Ctrl+X", "process-stop-2", "Stop the machine")
+        self.emergencyStopAction = self.createAction("&Stop",
+                                                self.emergencyStop,
+                                                QKeySequence("F1"), "process-stop-2", "Stop the machine")
 
         helpAboutAction = self.createAction("&About Image Changer",
-                self.helpAbout)
+                                            self.helpAbout)
         helpHelpAction = self.createAction("&Help", self.helpHelp,
-                QKeySequence.HelpContents)
+                                           QKeySequence.HelpContents)
 
         helpMenu = self.menuBar().addMenu("&Help")
         self.addActions(helpMenu, (helpAboutAction, helpHelpAction))
 
         self.runPlayPause = self.createAction("&PlayPause", self.playPause,
-                 None, "media-playback-start-2", 
-                 "Play or pause G-Code file")
-        self.runBackOne = self.createAction("&BackOne", self.decFrame,
-                 None, "media-seek-backward-2", 
-                 "Step back one line")
-        self.runForwardOne = self.createAction("&ForwardOne", self.incFrame,
-                 None, "media-seek-forward-2", 
-                 "Step forward one line")
+                                              None, "media-playback-start-2",
+                                              "Play or pause G-Code file")
+#        self.runBackOne = self.createAction("&BackOne", self.decFrame,
+#                                            None, "media-seek-backward-2",
+#                                            "Step back one line")
+        self.runForwardOne = self.createAction("&ForwardOne", self.sendLine,
+                                               None, "media-seek-forward-2",
+                                               "Step forward one line")
 
         fileToolbar = self.addToolBar("File")
         fileToolbar.setObjectName("FileToolBar")
         fileToolbar.setMovable(False)
-        self.addActions(fileToolbar, (fileQuitAction, 
-                                      fileOpenAction, 
-                                      fileSaveAction,
-                                      fileSaveAsAction))
+        self.addActions(fileToolbar, (fileQuitAction,
+                        fileOpenAction,
+                        fileSaveAction,
+                        fileSaveAsAction))
         fileToolbar.addAction(fileQuitAction)
         fileToolbar.addSeparator()
         fileToolbar.addAction(self.runPlayPause)
-        fileToolbar.addAction(self.runBackOne)
         fileToolbar.addAction(self.runForwardOne)
 
         fileToolbar.addSeparator()
 
-        # fileToolbar.addAction(viewTopAction)
-        # fileToolbar.addAction(viewTopRotAction)
-        # fileToolbar.addAction(viewFrontAction)
-        # fileToolbar.addAction(viewLeftAction)
-        # fileToolbar.addAction(viewIsoAction)
-        # fileToolbar.addSeparator()
-        
-        fileToolbar.addAction(emergencyStopAction)
-        
-#    def tick(self):
-#        pass
+        fileToolbar.addAction(self.emergencyStopAction)
 
-    def updateStatus(self, status):
-        self.gcViewer.setPosition(status)
-        self.editor.setActiveLine(status.lineNumber)
+    #    def tick(self):
+    #        pass
+
+    def keyPressEvent(self, event):
+        if event.key() == QKeySequence("F3"):
+            self.Tabs.setCurrentWidget(self.controlPage)
+        elif event.key() == QKeySequence("F5"):
+            self.Tabs.setCurrentWidget(self.codeEntryPage)
+        elif event.key() == QKeySequence("F7"):
+            self.Tabs.setCurrentWidget(self.editor)
+        QMainWindow.keyPressEvent(self, event)
+
+
+    def test(self):
+        pass
 
     def playPause(self):
         if self.play:
@@ -272,9 +231,11 @@ class MainWindow(QMainWindow):
         lineNumber = 1
         while block.isValid(): 
             if lineNumber >= cursorLine:
-                self.grbl.queueCommand(str(block.text()), lineNumber=lineNumber)
+                self.initiateMove('AUTO', str(block.text()), lineNumber = lineNumber)
+
+#                self.grbl.queueCommand(str(block.text()), lineNumber=lineNumber)
             block = block.next()   
-            lineNumber+=1
+            lineNumber += 1
         logger.debug('Leaving goPlay()()()()()()()()()()()()()()()()()()()()')
             
         
@@ -284,72 +245,51 @@ class MainWindow(QMainWindow):
         self.emergencyStop() 
         self.runPlayPause.setIcon(QIcon('images/media-playback-start-2.png'))
 
+    def initiateMove(self, source, command, lineNumber=-1):
+#        print 'initiateMove, Command: ', command
+        self.grbl.queueCommand(command, lineNumber=lineNumber)
+
     def commandFailed(self, command):
-#       self.emergencyStop()
-#       if command[0]=='N':
-#            i=1
-#            while command[i].isdigit():
-#                i+=1
-#            lineNumber = int(command[1:i])
-#                  
-#               
-#              command = 'N'+str(lineNumber)+command[i:]
-#         
-#         lineNum = command[1:
-
+        '''Called when a command generates an error
+        when sent to grbl. The error is in a particular
+        line
+        '''
         QMessageBox.critical(self,
-                             "Error in gcode",
-                             "Error in line: "+str(command),
-                             )
+                         "Error in gcode",
+                         "Error in line: " + str(command),
+                         )
 
-    def setLimits(self, centre, radius):
-        for i in range(3):
-            offset = centre[i]
-            if i==0:
-                slider = self.xOffsetSlider
-            elif i==1:
-                slider = self.yOffsetSlider
+    def updateStatus(self, status):
+        '''Called when grbl returns a change in status, typically
+        a change in position, but includes a change in line number,
+        buffer ready or machine running
+        '''
+
+#        print 'In updateStatus in main, line: ', status.lineNumber
+        self.gcViewer.setPosition(status)
+        self.editor.setActiveLine(status.lineNumber)
+        if self.machineRunning!=status.machineRunning:
+            self.machineRunning=status.machineRunning
+            if status.machineRunning:
+                self.emergencyStopAction.setIcon(QIcon('images/process-stop-2'))
             else:
-                slider = self.zOffsetSlider
-            if offset>1:
-                slider.setMaximum(0)
-                slider.setMinimum(-offset*2)
-                slider.setValue(-offset)
-            elif offset<-1:
-                slider.setMinimum(0)
-                slider.setMaximum(-offset*2)
-                slider.setValue(-offset)
-            else:
-                slider.setMinimum(-1)
-                slider.setMaximum(1)
-                slider.setValue(-offset)
-        self.glWidget.setRadius(radius)
+                self.emergencyStopAction.setIcon(QIcon('images/process-stop-2-bw'))
 
-    def decFrame(self):
-        pass
-        
-    def incFrame(self):
-        pass
 
-    # def viewTop(self):
-    #   self.gcViewer.setTopView()
-    #   # self.gcViewer.updateGL()
-    # 
-    # def viewTopRot(self):
-    #   self.gcViewer.setTopRotView()
-    #   # self.gcViewer.updateGL()
-    #   
-    # def viewFront(self):
-    #   self.gcViewer.setFrontView()
-    #   # self.gcViewer.updateGL()
-    #   
-    # def viewIso(self):
-    #   self.gcViewer.setIsoView()
-    #   # self.gcViewer.updateGL()
-        
+    def sendLine(self):
+        lineNumber = self.editor.getActiveLine()
+#        print 'Line number is: ', lineNumber
+        line = self.editor.getLine(lineNumber)
+#        print 'Activeline is: ', line
+        self.initiateMove('SINGLE_STEP', str(line), lineNumber = lineNumber)
+#        self.grbl.queueCommand(str(line), lineNumber = lineNumber)
+        self.editor.setActiveLine(lineNumber+1)
+
     def emergencyStop(self):
         self.grbl.emergencyStop()
 
+#----------------------------------------------------------------------
+# Utility routines
 
     def createAction(self, text, slot=None, shortcut=None, icon=None,
                      tip=None, checkable=False, signal="triggered()"):
@@ -366,15 +306,12 @@ class MainWindow(QMainWindow):
         if checkable:
             action.setCheckable(True)
         return action
-        
-#----------------------------------------------------------------------
-# Declan's utility routines
 
     def createButton(self, IconFile, Text, slotName):
         button = QPushButton(QIcon(IconFile), Text)
-        button.setFixedSize(QSize(32,32))
-        button.setIconSize(QSize(25,25))
-        self.connect(button, SIGNAL('clicked()'),slotName)
+        button.setFixedSize(QSize(32, 32))
+        button.setIconSize(QSize(25, 25))
+        self.connect(button, SIGNAL('clicked()'), slotName)
         return button
 
     def addActions(self, target, actions):
@@ -385,11 +322,35 @@ class MainWindow(QMainWindow):
                 target.addAction(action)
  
  
-    def goOneLine(self):
-        self.grbl.queueCommand(str(self.commandLine.text()))
-        self.historyText.append(self.commandLine.text())
-        self.commandLine.setText('')
-    
+    def goOneLine(self, text):
+        ''' Send the command in the commandLine to grbl,
+        and append it to the historyText window above.
+        '''
+#        self.grbl.queueCommand(str(self.commandLine.text()))
+#        self.historyText.append(self.commandLine.text())
+#        self.commandLine.setText('')
+        self.initiateMove('COMMAND_LINE', str(text))#, lineNumber = lineNumber)
+#        self.grbl.queueCommand(str(text))
+#        self.historyText.append(text)
+
+#    def commandKeyPress(self, keyStr):
+#        '''Implements a simple history
+#        for the command entry line, using the history window.
+#        '''
+#
+#        #print len(self.historyText.text())
+#        lines = self.historyText.document().toPlainText()
+#        lines = lines.split("\n")
+#        #findBlockByNumber(lineNumber-1)
+#
+#        print len(lines), lines[0]
+#
+#        #return str(block.text())
+#        if keyStr == 'up':
+#            print 'Up up and away'
+#        else:
+#            print 'Way on down'
+
 
     def closeEvent(self, event):
         if self.okToContinue():
@@ -400,9 +361,9 @@ class MainWindow(QMainWindow):
             settings.setValue("RecentFiles", recentFiles)
             settings.setValue("MainWindow/Size", QVariant(self.size()))
             settings.setValue("MainWindow/Position",
-                    QVariant(self.pos()))
+                              QVariant(self.pos()))
             settings.setValue("MainWindow/State",
-                    QVariant(self.saveState()))
+                              QVariant(self.saveState()))
         else:
             event.ignore()
 # 
@@ -480,15 +441,16 @@ class MainWindow(QMainWindow):
 #                                                 self.image.height()))
 #             self.updateStatus("Created new image")
 # 
-# 
+#
+
     def fileOpen(self):
         #assert False
         dir = os.path.dirname(self.filename) if self.filename is not None else "."
         formats = ["*.nc", "*.txt", "*.ngc"]
         fname = unicode(QFileDialog.getOpenFileName(self, "Choose G-code file", dir,
-                                    "G Code (%s)" % " ".join(formats)))
+                        "G Code (%s)" % " ".join(formats)))
         if fname:
-            self.filename=fname
+            self.filename = fname
             self.load()
    
 
@@ -496,6 +458,9 @@ class MainWindow(QMainWindow):
         exception = None
         fh = None
         try:
+#            self.statusBar().showMessage("Loading file")
+            
+
             fh = QFile(self.filename)
             if not fh.open(QIODevice.ReadOnly):
                 raise IOError, unicode(fh.errorString())
@@ -504,25 +469,29 @@ class MainWindow(QMainWindow):
             self.editor.clear()
             self.editor.setLineWrapMode(QTextEdit.NoWrap)
             self.editor.document().setModified(False)
-            
+
+            print 'load: about to start reading file'
             # using infile to temporarily store g-code for submission
             # to gcViewer. 
             file_contents = []
             while not stream.atEnd():
-                a=stream.readLine()
+                a = stream.readLine()
                 self.editor.append(a)
                 file_contents.append(a)
             self.editor.cursorToLine(0)
             self.editor.setState(GE_STOPPED)
             
-            
+#            self.statusBar().showMessage("Parsing file")
+            print 'load: about to send to parser'
             parser = gcParser()
             parser.load(self.filename)
-            center, radius =  parser.getGLLimits(parser.gl_list)
+            center, radius = parser.getGLLimits(parser.gl_list)
             self.gcViewer.initDrawList(parser.gl_list)
             self.gcViewer.setLimits(center, radius)
             self.gcViewer.setTopView()
-            
+
+            print 'load: done'
+
         except (IOError, OSError), e:
             exception = e
         finally:
@@ -530,6 +499,7 @@ class MainWindow(QMainWindow):
                 fh.close()
             if exception is not None:
                 raise exception
+#            self.statusBar().showMessage("File loading end", 1000)
 
 
      
@@ -569,7 +539,8 @@ class MainWindow(QMainWindow):
 #             while self.recentFiles.count() > 9:
 #                 self.recentFiles.takeLast()
 # 
-# 
+#
+
     def fileSave(self):
         if self.image.isNull():
             return
@@ -588,7 +559,7 @@ class MainWindow(QMainWindow):
             return
         fname = self.filename if self.filename is not None else "."
         formats = ["*.%s" % unicode(format).lower() \
-                   for format in QImageWriter.supportedImageFormats()]
+            for format in QImageWriter.supportedImageFormats()]
         fname = unicode(QFileDialog.getSaveFileName(self,
                         "Image Changer - Save Image", fname,
                         "Image files (%s)" % " ".join(formats)))
@@ -618,32 +589,53 @@ class MainWindow(QMainWindow):
     def fileQuit(self): 
         self.close()   
  
-#     def editZoom(self):
-#         if self.image.isNull():
-#             return
-#         percent, ok = QInputDialog.getInteger(self,
-#                 "Image Changer - Zoom", "Percent:",
-#                 self.zoomSpinBox.value(), 1, 400)
-#         if ok:
-#             self.zoomSpinBox.setValue(percent)
- 
     def helpAbout(self):
         QMessageBox.about(self, "About PyGrbl",
-                """<b>PyGrbl</b> v %s
-                <p>Copyright &copy; 2010 bobgates 
-                All rights reserved.
+                          """<b>PyGrbl</b> v %s
+                <p>Copyright &copy; 2011 bobgates
+                <p>All rights reserved.
                 <p>This application sequences g-code files for
-                the grbl application running on Arduino that runs
-                a CNC mill.
+                the grbl application running on Arduino that
+                drives a CNC mill.
                 <p>Python %s - Qt %s - PyQt %s on %s""" % (
-                __version__, platform.python_version(),
-                QT_VERSION_STR, PYQT_VERSION_STR, platform.system()))
+                          __version__, platform.python_version(),
+                          QT_VERSION_STR, PYQT_VERSION_STR, platform.system()))
 # 
 #
     def helpHelp(self):
         form = helpform.HelpForm("index.html", self)
         form.show()
 
+    def createViewerToolbar(self):
+        viewTopAction = self.createAction("&Top", self.gcViewer.setTopView,
+                                          None, 'projection_top',
+                                          "View simulation from top")
+        viewTopRotAction = self.createAction("Top &Right", self.gcViewer.setTopRotView,
+                                             None, 'projection_toprot',
+                                             "View simulation from top rotated")
+        viewFrontAction = self.createAction("&Front", self.gcViewer.setFrontView,
+                                            None, 'projection_front',
+                                            "View simulation from front")
+        viewLeftAction = self.createAction("&Front", self.gcViewer.setLeftView,
+                                           None, 'projection_left',
+                                           "View simulation from left")
+        viewIsoAction = self.createAction("&Iso", self.gcViewer.setIsoView,
+                                          None, 'projection_iso',
+                                          "View simulation in isometric form")
+        viewZoomAll = self.createAction("&ViewAll", self.gcViewer.resetLimits,
+                                        None, 'emblem-generic',
+                                        "Centre and scale view to see all")
+
+        viewerToolbar = QToolBar("Views")
+        viewerToolbar.setObjectName("ViewerToolBar")
+        viewerToolbar.addAction(viewTopAction)
+        viewerToolbar.addAction(viewTopRotAction)
+        viewerToolbar.addAction(viewFrontAction)
+        viewerToolbar.addAction(viewLeftAction)
+        viewerToolbar.addAction(viewIsoAction)
+        viewerToolbar.addSeparator()
+        viewerToolbar.addAction(viewZoomAll)
+        return viewerToolbar
 
 def main():
     app = QApplication(sys.argv)

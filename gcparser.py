@@ -8,7 +8,7 @@ import copy
 
 from PyQt4.QtGui import *
 from PyQGLViewer import *
-from qgllogo import *
+#from qgllogo import *
 import OpenGL.GL as ogl
 import math
 #import grblserial
@@ -389,8 +389,8 @@ class gcParser():
 					ymax=max(ymax, line[1])
 					zmax=max(zmax, line[2])
 			
-		center = Vec((xmin+xmax)/2, (ymin+ymax)/2, (zmin+zmax)/2)
-		range = Vec(xmax-xmin, ymax-ymin, zmax-zmin)
+		center = [(xmin+xmax)/2, (ymin+ymax)/2, (zmin+zmax)/2]
+		range = [xmax-xmin, ymax-ymin, zmax-zmin]
 		radius = max(range)/2.0
 			
 		return center, radius

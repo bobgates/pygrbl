@@ -1,13 +1,37 @@
-PyGrbl - a python interface for grbl that will hopefully one day provide EMC2-like functionality. Written using PyQt, under OS X. Also needs PyQGLViewer.
+PyGrbl - a python interface for grbl that will hopefully one day provide
+EMC2-like functionality. Written using PyQt, under OS X.
 
-At the moment, there are just test and stub programs:
-- pygrbl is the main program
-- gc_parser parses the g-code files and puts the parsed result in an OpenGL window
-- grblserial provides the interface to my version of grbl, see elsewhere on github.
+- pygrbl is the main program, which interfaces to my version of grbl,
+see elsewhere on github.
 
-At present, grblserial is a command line sequencer for g-code that is written 'just right' - in other words, it isn't very robust about g-codes that grbl can't understand.
+At present, grblserial is a command line sequencer for g-code that is
+written 'just right' - it isn't very robust about g-codes that grbl
+can't understand.
 
-The code is very rough and ready, but take a look, and get in touch if you're interested...
+The code is very rough and ready, but take a look, and get in touch if
+you're interested...
+
+27 Dec 2010
+-----------
+Things are maturing, slowly.
+
+- grbl now doesn't block, so it works nicely with pygrbl, and pygrbl doesn't
+skip any lines, at least not in simulation.
+- 3D window is now implemented in QtOpenGL, rather than QGLViewer. This
+makes installation a whole lot simpler, and I managed to kill a couple
+of bugs at the same time.
+- User interface is changing, a bit. The three modes are now distinct
+in the user interface, but they are still not exclusive in code - it is
+possible to type commands into the middle of automatic code execution.
+- There is no jog mode!
+- There's been quite a bit of refactoring and cleaning up, a couple of
+new icons, etc. I'm adding the icon directory and the help directory
+to the git project. The icons are mostly from an open source icon
+foundry. A couple I drew myself, and there are one or two with unknown
+provenance (they were on my machine, I'm not sure where from). The 3D
+view icons were taken from an open source Google Sketchup model. If one
+of these icons belongs to you and you object to my using it, let me know
+and I'll remove it.
 
 
 8 Dec 2010
@@ -17,20 +41,27 @@ Pygrbl is working, up to a point:
 
 - If a CNC file is loaded, it will run on pressing the play button.
 - The file will run from the current line, highlighted in green.
-- On pause, the mill will come to an emergency stop, and the current line will be active in the file window, so running can resume when play is pressed again.
-- Commands can be entered in the manual entry line. At present they'll be added to the command queue, probably at the end, so won't be acted on if there is a file running.
+- On pause, the mill will come to an emergency stop, and the current
+line will be active in the file window, so running can resume when play
+is pressed again.
+- Commands can be entered in the manual entry line. At present they'll
+be added to the command queue, probably at the end, so won't be acted on
+if there is a file running.
 
 Things to do:
-- Pygrbl doesn't stop on error! The bad line is ignored, then some ugly stuff happens and a few lines are skipped.
+- Pygrbl doesn't stop on error! The bad line is ignored, then some ugly
+stuff happens and a few lines are skipped.
 - Dwell causes blocking in grbl, which leads to problems in Pygrbl.
 
 To do: GRBL
-- Add dwell and stop to stepper buffer queueing system so that they don't block.
+- Add dwell and stop to stepper buffer queueing system so that they
+don't block.
 
 
 To do: PYGRBL
 - Add command checking so that bad commands don't get sent to grbl
-- Add state to Pygrbl so that it is either operating manually or automatically.
+- Add state to Pygrbl so that it is either operating manually or
+automatically.
 - Add breakpoints to g-code capability
 [...]
 - Add full interpreter for g-code

@@ -145,6 +145,9 @@ class grblSerial(QObject):
         '''Takes a line response from grbl to an 'eq' command,
         which is in the form: ORN0X0Y0Z0, and fills a grblStatusT
         class with the contents'''
+
+#        print 'Status: ', line
+
         self.status.mode = line[0]
         self.status.bufferReady = (line[1] == 'R')
         self.status.machineRunning = not (line[0] == 'O')
