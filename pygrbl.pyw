@@ -24,6 +24,7 @@ import helpform
 import qrc_resources
 import grblserial
 from gcparser import gcParser
+from joginterface import JogInterfaceWidget
 import ogl_window
 from gcodeedit import gcodeEdit
 
@@ -54,6 +55,7 @@ class MainWindow(QMainWindow):
         self.gcViewer = ogl_window.GLWidget()#twidget)
 
         self.glWidgetArea = QScrollArea()
+        self.gcViewer.setFocusPolicy(Qt.NoFocus)
         self.glWidgetArea.setWidget(self.gcViewer)
         self.glWidgetArea.setWidgetResizable(True)
         self.glWidgetArea.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -94,15 +96,19 @@ class MainWindow(QMainWindow):
 
 
         self.Tabs = QTabWidget()
+        self.connect(self.Tabs, SIGNAL('currentChanged'), self.tabChanged)
         self.Tabs.addTab(self.codeEntryPage, "Manual (F5)")
 
-    #Control page:
+    #Jog control page:
         self.controlPage = QWidget()
         self.controlLayout = QVBoxLayout(self.controlPage)
         clabel = QLabel("My controls")
         self.controlLayout.addWidget(clabel)
 
-
+        self.jog = JogInterfaceWidget()
+        self.connect(self.jog, SIGNAL("jogEvent(char, int)"), self.goJog)
+        self.controlLayout.addWidget(self.jog)
+        self.controlLayout.addSpacing(200)
         self.Tabs.insertTab(0, self.controlPage, "Jog (F3)")
 
         font = QFont("Courier", 14)
@@ -202,14 +208,32 @@ class MainWindow(QMainWindow):
     #    def tick(self):
     #        pass
 
+
+    def tabChanged(self, event):
+        print 'Tab changed - state change code to follow'
+        if self.Tabs.currentWidget()==self.controlPage:
+            self.jog.setFocus()
+        pass
+
     def keyPressEvent(self, event):
+
+        processed = False
         if event.key() == QKeySequence("F3"):
             self.Tabs.setCurrentWidget(self.controlPage)
+            processed = True
         elif event.key() == QKeySequence("F5"):
             self.Tabs.setCurrentWidget(self.codeEntryPage)
+            processed = True
         elif event.key() == QKeySequence("F7"):
             self.Tabs.setCurrentWidget(self.editor)
-        QMainWindow.keyPressEvent(self, event)
+            processed = True
+
+        if not processed:
+            QMainWindow.keyPressEvent(self, event)
+
+
+    def goJog(self, axis, speed):
+        print 'in goJog: ', axis, speed
 
 
     def test(self):
