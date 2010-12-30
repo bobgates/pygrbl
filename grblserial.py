@@ -114,7 +114,7 @@ class grblSerial(QObject):
             if not self.ser.write(c):
                 raise Exception('Failed to write byte in string: %s' % block)
             time.sleep(0.001)
-            
+
     def updateStatus(self):
         '''Send a status query to grbl and update the
         status variable.
@@ -182,12 +182,15 @@ class grblSerial(QObject):
         return self.status
         
     def getFreshStatus(self):
-        '''Use this call to get grbl to update its status 
+        '''Update grbl status and return it.
+
+        Use this call to get grbl to update its status
         before returning'''
+        status = copy.copy(self.status)
         self.updateStatus()
+        if not status == self.status:   #I don't know why, but != doesn't work
+            self.emit(SIGNAL("statusChanged"), self.status)
         return self.status
-    
-        
        
     def stripWhitespace(self, str):
         line = str.replace(' ', '')
@@ -230,15 +233,7 @@ class grblSerial(QObject):
         while len(self.commandQueue) > 0:
             self.commandQueue.pop()
         logger.debug('Emergency stop routine left happily')
-        
-#    def stick(self):
-#        logger.debug('in stick***********************************')
-#        self.tick()
-#         if status!=self.status:
-#             logger.debug('in stick: emitting status')
-#             self.emit(SIGNAL("statusChanged"), self.status)
-        
-        
+                
     def tick(self):
         '''Timer update: checks if anything is in the
         command queue, and adds it to grbl, until

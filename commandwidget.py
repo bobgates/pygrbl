@@ -46,7 +46,7 @@ class CommandWidget(QWidget):
         self.cepLayout.addWidget(historyLabel)
         self.cepLayout.addWidget(self.historyText)
 
-        print 'added history label'
+#        print 'added history label'
 
         commandLabel = QLabel("Command:")
         self.commandLayout = QHBoxLayout()

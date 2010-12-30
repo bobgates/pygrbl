@@ -63,8 +63,8 @@ try:
 	from OpenGL.GL import *
 except ImportError:
 	app = QtGui.QApplication(sys.argv)
-	QtGui.QMessageBox.critical(None, "OpenGL grabber",
-			"PyOpenGL must be installed to run this example.")
+	QtGui.QMessageBox.critical(None, "OpenGL g-code viewer",
+			"PyOpenGL must be installed to run this.")
 	sys.exit(1)
 
 
@@ -555,14 +555,9 @@ class MainWindow(QtGui.QMainWindow):
 		super(MainWindow, self).__init__()
 
 		centralWidget = QtGui.QWidget()
+        
 		self.setCentralWidget(centralWidget)
-
 		self.glWidget = GLWidget()
-		# parser = gcParser()
-		#		parser.load('cncweb.txt')
-		#		self.glWidget.initDrawList(parser.gl_list)
-
-		# self.pixmapLabel = QtGui.QLabel()
 
 		self.glWidgetArea = QtGui.QScrollArea()
 		self.glWidgetArea.setWidget(self.glWidget)
@@ -572,12 +567,6 @@ class MainWindow(QtGui.QMainWindow):
 		self.glWidgetArea.setSizePolicy(QtGui.QSizePolicy.Ignored,
 				QtGui.QSizePolicy.Ignored)
 		self.glWidgetArea.setMinimumSize(100, 100)
-
-		# self.pixmapLabelArea = QtGui.QScrollArea()
-		# self.pixmapLabelArea.setWidget(self.pixmapLabel)
-		# self.pixmapLabelArea.setSizePolicy(QtGui.QSizePolicy.Ignored,
-		#		  QtGui.QSizePolicy.Ignored)
-		# self.pixmapLabelArea.setMinimumSize(50, 50)
 
 		xSlider = self.createSlider(self.glWidget.xRotationChanged,
 				self.glWidget.setXRotation)
@@ -627,7 +616,6 @@ class MainWindow(QtGui.QMainWindow):
 
 		centralLayout = QtGui.QGridLayout()
 		centralLayout.addWidget(self.glWidgetArea, 0, 0)
-		# centralLayout.addWidget(self.pixmapLabelArea, 0, 1)
 		centralLayout.addWidget(xSlider, 1, 0)
 		centralLayout.addWidget(ySlider, 2, 0)
 		centralLayout.addWidget(zSlider, 3, 0)
@@ -654,35 +642,12 @@ class MainWindow(QtGui.QMainWindow):
 			self.glWidget.usePerspective = False
 		self.glWidget.resizeGL(self.width(), self.height())
 
-	# def renderIntoPixmap(self):
-	#	size = self.getSize()
-	# 
-	#	if size.isValid():
-	#		pixmap = self.glWidget.renderPixmap(size.width(), size.height())
-	#		self.setPixmap(pixmap)
-	# 
-	# def grabFrameBuffer(self):
-	#	image = self.glWidget.grabFrameBuffer()
-	#	self.setPixmap(QtGui.QPixmap.fromImage(image))
-	# 
-	# def clearPixmap(self):
-	#	self.setPixmap(QtGui.QPixmap())
-
 	def about(self):
 		QtGui.QMessageBox.about(self, "About Grabber",
 				"The <b>Grabber</b> example demonstrates two approaches for "
 				"rendering OpenGL into a Qt pixmap.")
 
 	def createActions(self):
-	#	self.renderIntoPixmapAct = QtGui.QAction("&Render into Pixmap...",
-	#			self, shortcut="Ctrl+R", triggered=self.renderIntoPixmap)
-	# 
-	#	self.grabFrameBufferAct = QtGui.QAction("&Grab Frame Buffer", self,
-	#			shortcut="Ctrl+G", triggered=self.grabFrameBuffer)
-	# 
-	#	self.clearPixmapAct = QtGui.QAction("&Clear Pixmap", self,
-	#			shortcut="Ctrl+L", triggered=self.clearPixmap)
-	# 
 		self.exitAct = QtGui.QAction("E&xit", self, shortcut="Ctrl+Q",
 				triggered=self.close)
 	
@@ -693,9 +658,6 @@ class MainWindow(QtGui.QMainWindow):
 
 	def createMenus(self):
 		self.fileMenu = self.menuBar().addMenu("&File")
-		# self.fileMenu.addAction(self.renderIntoPixmapAct)
-		# self.fileMenu.addAction(self.grabFrameBufferAct)
-		# self.fileMenu.addAction(self.clearPixmapAct)
 		self.fileMenu.addSeparator()
 		self.fileMenu.addAction(self.exitAct)
 
@@ -742,16 +704,12 @@ class MainWindow(QtGui.QMainWindow):
 				slider.setMaximum(1)
 				slider.setValue(-offset)
 		self.glWidget.setLimits(centre, radius)
-		# print 'Mainwin: setLimits'
 
 if __name__ == '__main__':
 
 	parser = gcParser()
 	parser.load('cncweb.txt')
 	center, radius =  parser.getGLLimits(parser.gl_list)
-
-	# print 'Center: ', center
-	# print 'Radius: ', radius
 
 	app = QtGui.QApplication(sys.argv)
 	mainWin = MainWindow()

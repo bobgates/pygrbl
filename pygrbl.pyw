@@ -15,18 +15,20 @@ import sys
 from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 import logging
+import time
 
 #import helpform
 #import newimagedlg
 
 import commandwidget
 import helpform
-import qrc_resources
+from gcodeedit import gcodeEdit
 import grblserial
 from gcparser import gcParser
 from joginterface import JogInterfaceWidget
 import ogl_window
-from gcodeedit import gcodeEdit
+import preferences
+import qrc_resources
 
 logger = logging.getLogger('grblserial')
 
@@ -47,6 +49,8 @@ class MainWindow(QMainWindow):
         self.filename = 'gcode files/cncweb.txt'
         self.play = False
         self.machineRunning = True
+
+        self.preferences = preferences.prefsClass()
 
         # Create the right hand widget, give it a layout
         # and put the viewer and the geometry/view controls into it.
@@ -109,17 +113,23 @@ class MainWindow(QMainWindow):
         self.connect(self.jog, SIGNAL("jogEvent(char, int)"), self.goJog)
         self.controlLayout.addWidget(self.jog)
         self.controlLayout.addSpacing(200)
-        self.Tabs.insertTab(0, self.controlPage, "Jog (F3)")
+        self.Tabs.insertTab(0, self.controlPage, "Jog (F4)")
 
         font = QFont("Courier", 14)
         font.setFixedPitch(True)
 
     #Bottom area that contains the text file:
+        self.editPage = QWidget()
+        self.editLayout = QVBoxLayout(self.editPage)
         self.editor = gcodeEdit()
         self.editor.setFont(font)
+        self.editLayout.addWidget(self.editor)
+        editToolbar = QToolBar()
+        self.editLayout.addWidget(editToolbar)
 
-        self.Tabs.addTab(self.editor, "Program (F7)")
-        self.Tabs.setCurrentWidget(self.editor)
+
+        self.Tabs.addTab(self.editPage, "Program (F6)")
+        self.Tabs.setCurrentWidget(self.editPage)
 
     # Create the splitters that manage space of all
     # the sub places
@@ -127,10 +137,6 @@ class MainWindow(QMainWindow):
         self.leftrightSplit = QSplitter()
         self.leftrightSplit.addWidget(self.Tabs)
         self.leftrightSplit.addWidget(rwidget)
-#        self.mainsplit = QSplitter(Qt.Vertical)
-#        self.mainsplit.addWidget(self.leftrightSplit)
-#        self.mainsplit.addWidget(self.editor)
-#        self.setCentralWidget(self.mainsplit)
         self.setCentralWidget(self.leftrightSplit)
 
         self.printer = None
@@ -141,7 +147,7 @@ class MainWindow(QMainWindow):
         self.sizeLabel.setAlignment(Qt.AlignLeft)
         status = self.statusBar()
         status.setSizeGripEnabled(False)
-        status.addPermanentWidget(self.sizeLabel)
+#        status.addPermanentWidget(self.sizeLabel)
         status.showMessage("Ready", 5000)
 
 #        self.progress = QProgressBar()
@@ -157,6 +163,8 @@ class MainWindow(QMainWindow):
                                            "Open an existing G-code file")
         fileSaveAction = self.createAction("&Save", self.fileSave,
                                            QKeySequence.Save, "filesave", "Save the gcode file")
+        filePreferencesAction = self.createAction('&Preferences', self.displayPrefs)
+#                                            '', 'fileopen', 'Set application preferences')
         fileSaveAsAction = self.createAction("Save &As...",
                                              self.fileSaveAs, icon="filesaveas",
                                              tip="Save the gcode file using a new name")
@@ -165,48 +173,69 @@ class MainWindow(QMainWindow):
                                            "Ctrl+Q", "system-exit", "Close the application")
         fileQuitAction.MenuRole = QAction.QuitRole
         fileMenu = self.menuBar().addMenu("&File")
-        self.addActions(fileMenu, (fileOpenAction, fileSaveAction, None, fileQuitAction))
+        # fileQuitAction gets put on the application menu on the Mac,
+        # where it belongs!
+#        self.addActions(fileMenu, (fileOpenAction, fileSaveAction, None, fileQuitAction))
+        self.addActions(fileMenu, (fileOpenAction, fileQuitAction))
 
         self.emergencyStopAction = self.createAction("&Stop",
                                                 self.emergencyStop,
-                                                QKeySequence("F1"), "process-stop-2", "Stop the machine")
+                                                QKeySequence("F1"), "process-stop-2",
+                                                "Stop the machine (F1)")
 
         helpAboutAction = self.createAction("&About Image Changer",
                                             self.helpAbout)
         helpHelpAction = self.createAction("&Help", self.helpHelp,
-                                           QKeySequence.HelpContents)
+                                           QKeySequence.HelpContents,
+                                           "help-contents-5",
+                                           "Help"
+                                           )
 
         helpMenu = self.menuBar().addMenu("&Help")
-        self.addActions(helpMenu, (helpAboutAction, helpHelpAction))
+        self.addActions(helpMenu, (helpAboutAction, helpHelpAction, filePreferencesAction))
 
         self.runPlayPause = self.createAction("&PlayPause", self.playPause,
-                                              None, "media-playback-start-2",
-                                              "Play or pause G-Code file")
+                                              QKeySequence("F2"),
+                                              "media-playback-start-2",
+                                              "Play or pause G-Code file (F2)")
 #        self.runBackOne = self.createAction("&BackOne", self.decFrame,
 #                                            None, "media-seek-backward-2",
 #                                            "Step back one line")
         self.runForwardOne = self.createAction("&ForwardOne", self.sendLine,
-                                               None, "media-seek-forward-2",
-                                               "Step forward one line")
+                                               QKeySequence("F3"),
+                                               "media-seek-forward-2",
+                                               "Step forward one line (F)")
 
         fileToolbar = self.addToolBar("File")
         fileToolbar.setObjectName("FileToolBar")
         fileToolbar.setMovable(False)
-        self.addActions(fileToolbar, (fileQuitAction,
-                        fileOpenAction,
-                        fileSaveAction,
-                        fileSaveAsAction))
+#        self.addActions(fileToolbar, (fileQuitAction,
+#                        fileOpenAction,
+#                        fileSaveAction,
+#                        fileSaveAsAction))
+        fileToolbar.addAction(fileOpenAction)
         fileToolbar.addAction(fileQuitAction)
         fileToolbar.addSeparator()
-        fileToolbar.addAction(self.runPlayPause)
-        fileToolbar.addAction(self.runForwardOne)
 
         fileToolbar.addSeparator()
 
+        fileToolbar.addAction(helpHelpAction)
         fileToolbar.addAction(self.emergencyStopAction)
+
+        # editToolbar was defined up the page somewhere,
+        # and appears below the g-code edit window.
+        editToolbar.addAction(self.runPlayPause)
+        editToolbar.addAction(self.runForwardOne)
+        editToolbar.addAction(self.emergencyStopAction)
+
 
     #    def tick(self):
     #        pass
+
+    def displayPrefs(self):
+        prefsWidget = preferences.PreferencesDialog(self.preferences)
+        if prefsWidget.exec_():
+            self.preferences = prefsWidget.getPrefs()
 
 
     def tabChanged(self, event):
@@ -218,14 +247,14 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
 
         processed = False
-        if event.key() == QKeySequence("F3"):
+        if event.key() == QKeySequence("F4"):
             self.Tabs.setCurrentWidget(self.controlPage)
             processed = True
         elif event.key() == QKeySequence("F5"):
             self.Tabs.setCurrentWidget(self.codeEntryPage)
             processed = True
-        elif event.key() == QKeySequence("F7"):
-            self.Tabs.setCurrentWidget(self.editor)
+        elif event.key() == QKeySequence("F6"):
+            self.Tabs.setCurrentWidget(self.editPage)
             processed = True
 
         if not processed:
@@ -233,7 +262,42 @@ class MainWindow(QMainWindow):
 
 
     def goJog(self, axis, speed):
-        print 'in goJog: ', axis, speed
+        '''Instructs stepper to take one jog step.
+
+        Gets called by jog widget, with axis ('x', 'y' or 'z'
+        and speed, from -2 to 2. Doesn't return until jog is
+        done.
+        '''
+
+#        print 'Speed in goJog is ', speed
+        jogstep=self.preferences.jogSizeByIndex(speed)
+#        print 'which gives jogstep: ', jogstep
+        
+        status = self.grbl.getFreshStatus()
+        if status.machineRunning:
+            return
+        if axis == 'x':
+            target = status.x
+        elif axis == 'y':
+            target = status.y
+        elif axis == 'z':
+            target = status.z
+
+        target += jogstep
+
+        commandstring = 'g1%s%.2f' % (axis, target)
+#        print 'Jog command: ', commandstring
+        try:
+            self.grbl.sendCommand(commandstring)
+        except:
+            QMessageBox.warning(self, "Error",
+                                "Error sending jog command to grbl")
+            return
+
+        status = self.grbl.getFreshStatus()
+        while status.machineRunning:
+            time.sleep(0.1)
+            status = self.grbl.getFreshStatus()
 
 
     def test(self):
@@ -350,32 +414,8 @@ class MainWindow(QMainWindow):
         ''' Send the command in the commandLine to grbl,
         and append it to the historyText window above.
         '''
-#        self.grbl.queueCommand(str(self.commandLine.text()))
-#        self.historyText.append(self.commandLine.text())
-#        self.commandLine.setText('')
-        self.initiateMove('COMMAND_LINE', str(text))#, lineNumber = lineNumber)
-#        self.grbl.queueCommand(str(text))
-#        self.historyText.append(text)
-
-#    def commandKeyPress(self, keyStr):
-#        '''Implements a simple history
-#        for the command entry line, using the history window.
-#        '''
-#
-#        #print len(self.historyText.text())
-#        lines = self.historyText.document().toPlainText()
-#        lines = lines.split("\n")
-#        #findBlockByNumber(lineNumber-1)
-#
-#        print len(lines), lines[0]
-#
-#        #return str(block.text())
-#        if keyStr == 'up':
-#            print 'Up up and away'
-#        else:
-#            print 'Way on down'
-
-
+        self.initiateMove('COMMAND_LINE', str(text))
+        
     def closeEvent(self, event):
         if self.okToContinue():
             settings = QSettings()
@@ -494,7 +534,7 @@ class MainWindow(QMainWindow):
             self.editor.setLineWrapMode(QTextEdit.NoWrap)
             self.editor.document().setModified(False)
 
-            print 'load: about to start reading file'
+            print 'load: to start reading file'
             # using infile to temporarily store g-code for submission
             # to gcViewer. 
             file_contents = []
@@ -669,6 +709,7 @@ def main():
     app.setWindowIcon(QIcon("images/icon.png"))
     form = MainWindow()
     form.show()
+    form.raise_()
     sys.exit(app.exec_())
 
 main()
