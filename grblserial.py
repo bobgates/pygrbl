@@ -4,12 +4,15 @@ running on the arduino. They're written assuming a mac/linux port
 naming scheme, but should be easy enough to change.
 '''
 
-import serial
-import time
-import sys
-from PyQt4.QtCore import * #QTimer, QObject
 import copy
+import serial
 import string
+import sys
+import time
+
+from PyQt4.QtCore import * #QTimer, QObject
+
+import gcparser
 
 import logging
 logger = logging.getLogger('grblserial')
@@ -59,7 +62,7 @@ class grblSerial(QObject):
     
 
     # Unsupported g-codes are simply not sent to grbl.
-    unsupported = ['G04', 'G43', 'G54']  
+    unsupported = ['G04', 'G43', 'G54', 'G64', 'G40', 'G49', 'T1', 'M8']
 
     def __init__(self):
         '''Initialize grblSerial object with default 
@@ -69,7 +72,7 @@ class grblSerial(QObject):
         #QObject.__init__(self)
         self.portname = '/dev/tty.usbserial-A700dXL8'
         try:
-        	self.ser = self.openSerial(self.portname)
+            self.ser = self.openSerial(self.portname)
         except:
             self.ser = None
         self.commandQueue = []
@@ -200,32 +203,32 @@ class grblSerial(QObject):
         return line
             
     def sendCommand(self, command):
-		if not self.ser:
-			print 'In sendCommand. No serial device connected. Command: ', command
-			return
+        if not self.ser:
+            print 'In sendCommand. No serial device connected. Command: ', command
+            return
         
-		command = self.stripWhitespace(command).upper()
+        command = self.stripWhitespace(command).upper()
 
-		logger.debug('sendCommand tx: ' + command)
+        logger.debug('sendCommand tx: ' + command)
 
-		self.send(command + '\n')
+        self.send(command + '\n')
 
-		line = self.ser.readline()
-		logger.debug('sendCommand rx1: ' + line)
+        line = self.ser.readline()
+        logger.debug('sendCommand rx1: ' + line)
 
 
-		line = self.stripWhitespace(line).upper()
+        line = self.stripWhitespace(line).upper()
 
-		if line != command:
-			logger.error('sendCommand: Response:_' + line + '_ does not equal command:_' + command + '_')
-			raise Exception('Response:_' + line + '_ does not equal command:_' + command + '_')
+        if line != command:
+            logger.error('sendCommand: Response:_' + line + '_ does not equal command:_' + command + '_')
+            raise Exception('Response:_' + line + '_ does not equal command:_' + command + '_')
 
-		line = self.ser.readline()
-		logger.debug('sendCommand rx2: ' + line)
-		if not ('ok' in line):
-			logger.error('sendCommand: response to command:_' + command + '_ not okay: ' + line)
-			raise Exception('Response to command:_' + command + '_ not okay: ' + line)
-		return 1
+        line = self.ser.readline()
+        logger.debug('sendCommand rx2: ' + line)
+        if not ('ok' in line):
+            logger.error('sendCommand: response to command:_' + command + '_ not okay: ' + line)
+            raise Exception('Response to command:_' + command + '_ not okay: ' + line)
+        return 1
       
     def emergencyStop(self):
         self.sendCommand('ES\n')
@@ -250,20 +253,23 @@ class grblSerial(QObject):
         if len(self.commandQueue) > 0:
             while (self.status.bufferReady) and (len(self.commandQueue) > 0):
                 command = self.commandQueue.pop(0)
+                command = gcparser.cleanGcodeLine(command)
                 runCommand = True
-                if len(self.stripWhitespace(command)) == 0:
-					runCommand = False;
+#                if len(self.stripWhitespace(command)) == 0:
+                if len(command) == 0:
+                    runCommand = False;
                 for text in grblSerial.unsupported:
                     if command.find(text) != -1:
-						runCommand = False
-						break
+                        runCommand = False
+                        break
                 if runCommand:
                     try:
                         self.sendCommand(command)
                     except:
-						self.commandQueue = []
-						self.commandQueue.append(0, 'M0')
-						self.emit(SIGNAL("CommandFailed(PyQt_PyObject)"), command)
+                        self.commandQueue = []
+                        self.commandQueue.append('M0')
+                        self.emit(SIGNAL("CommandFailed(PyQt_PyObject)"), command)
+                        print 'Command failed: ', command
                 logger.debug('tick: before final updateStatus')
                 self.updateStatus()
         if not status == self.status:   #I don't know why, but != doesn't work
@@ -289,11 +295,14 @@ class grblSerial(QObject):
         
         if lineNumber != -1:
             if command[0] == 'N':
-				i = 1
-				while command[i].isdigit():
-					i += 1
-				command = 'N' + str(lineNumber) + command[i:]
+                i = 1
+                while command[i].isdigit():
+                    i += 1
+                command = 'N' + str(lineNumber) + command[i:]
+            else:
+                command = 'N' + str(lineNumber) + command
         self.commandQueue.append(command)
+        print 'appending command: ', command
 
     def close(self):
         self.ser.close()
@@ -301,54 +310,54 @@ class grblSerial(QObject):
         
 if __name__ == '__main__':
 
-	'''Test program that creates a grblSerial object and
-	sends it a number of commands, either a short default
-	set or a longer set from a file.
-	'''
+    '''Test program that creates a grblSerial object and
+    sends it a number of commands, either a short default
+    set or a longer set from a file.
+    '''
 
-	commands = ['F60N120G1x3y0z0',
-		'F30N130g1x3y3z0',
-		'N140x0y3',
-		'n150x0y0',
-		'n160z1',
-		'n170g0x1y1.5',
-		'n175g1z0',
-		'n180g2x2i.5',
-		'n190x1i-0.5',
-		'n200g0z1',
-		'n210x0y0',
-		]
+    commands = ['F60N120G1x3y0z0',
+        'F30N130g1x3y3z0',
+        'N140x0y3',
+        'n150x0y0',
+        'n160z1',
+        'n170g0x1y1.5',
+        'n175g1z0',
+        'n180g2x2i.5',
+        'n190x1i-0.5',
+        'n200g0z1',
+        'n210x0y0',
+        ]
 
-	file = open('cncweb_short.txt')
-	#file = open('geebeepath.txt')
-	commands = file.readlines()
-	file.close()
+    file = open('cncweb_short.txt')
+    #file = open('geebeepath.txt')
+    commands = file.readlines()
+    file.close()
 
-	grbl = grblSerial()
+    grbl = grblSerial()
 
-	for i, command in enumerate(commands):
-		#        print 'adding'
-		grbl.queueCommand(command, lineNumber=i)
+    for i, command in enumerate(commands):
+        #        print 'adding'
+        grbl.queueCommand(command, lineNumber=i)
 
-	while not grbl.bufferEmpty():
-		time.sleep(2)
-		grbl.tick()
-		result = grbl.getStatus()
-		print result.lineNumber, ': ', result.x, result.y, result.z
-		sys.stdout.flush()
+    while not grbl.bufferEmpty():
+        time.sleep(2)
+        grbl.tick()
+        result = grbl.getStatus()
+        print result.lineNumber, ': ', result.x, result.y, result.z
+        sys.stdout.flush()
     
-	#Run program for ten more seconds after grbl's buffer goes
+    #Run program for ten more seconds after grbl's buffer goes
     #empty, because when the serial link is closed grbl resets, and
     # its display gets zeroed. This allows me to at least check what
     # it was displaying when the program ended.
-	for i in range(100):
-		time.sleep(2)
-		#grbl.tick()
-		result = grbl.getStatus()
-		print result.lineNumber, ': ', result.x, result.y, result.z
-		sys.stdout.flush()
+    for i in range(100):
+        time.sleep(2)
+        #grbl.tick()
+        result = grbl.getStatus()
+        print result.lineNumber, ': ', result.x, result.y, result.z
+        sys.stdout.flush()
 
-	grbl.close()
+    grbl.close()
 
 
 

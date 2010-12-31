@@ -334,7 +334,8 @@ class MainWindow(QMainWindow):
         self.runPlayPause.setIcon(QIcon('images/media-playback-start-2.png'))
 
     def initiateMove(self, source, command, lineNumber=-1):
-#        print 'initiateMove, Command: ', command
+        print 'initiateMove, Command: ', command,
+        print 'lineNumber: ', lineNumber
         self.grbl.queueCommand(command, lineNumber=lineNumber)
 
     def commandFailed(self, command):
@@ -355,6 +356,7 @@ class MainWindow(QMainWindow):
 
 #        print 'In updateStatus in main, line: ', status.lineNumber
         self.gcViewer.setPosition(status)
+        print 'updateStatus, activeline: ', status.lineNumber
         self.editor.setActiveLine(status.lineNumber)
         if self.machineRunning!=status.machineRunning:
             self.machineRunning=status.machineRunning

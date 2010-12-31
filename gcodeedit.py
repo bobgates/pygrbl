@@ -72,6 +72,8 @@ class gcodeEdit(QTextEdit):
         the document.
         '''
 
+        #print 'setActiveLine: ', lineNumber
+
         #unhighlight old block, if it wasn't zero:
         if lineNumber == self.activeLine:
             return
