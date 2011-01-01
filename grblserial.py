@@ -10,7 +10,7 @@ import string
 import sys
 import time
 
-from PyQt4.QtCore import * #QTimer, QObject
+from PyQt4.QtCore import * 
 
 import gcparser
 
@@ -20,7 +20,7 @@ hdlr = logging.FileHandler('log_.txt')
 formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
 hdlr.setFormatter(formatter)
 logger.addHandler(hdlr) 
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.ERROR)
 
 
 class grblStatusT(object):
@@ -62,7 +62,7 @@ class grblSerial(QObject):
     
 
     # Unsupported g-codes are simply not sent to grbl.
-    unsupported = ['G04', 'G43', 'G54', 'G64', 'G40', 'G49', 'T1', 'M8']
+    unsupported = [] # 'G04', 'G43', 'G54', 'G64', 'G40', 'G49', 'T1', 'M8']
 
     def __init__(self):
         '''Initialize grblSerial object with default 
@@ -218,12 +218,16 @@ class grblSerial(QObject):
 
 
         line = self.stripWhitespace(line).upper()
+        mline = line
 
         if line != command:
             logger.error('sendCommand: Response:_' + line + '_ does not equal command:_' + command + '_')
             raise Exception('Response:_' + line + '_ does not equal command:_' + command + '_')
 
         line = self.ser.readline()
+        rline = line.strip('\r')
+        rline = rline.strip('\n')
+        print 'Line: ', mline, ' command: ', command, ' response: ',rline
         logger.debug('sendCommand rx2: ' + line)
         if not ('ok' in line):
             logger.error('sendCommand: response to command:_' + command + '_ not okay: ' + line)
@@ -265,11 +269,12 @@ class grblSerial(QObject):
                 if runCommand:
                     try:
                         self.sendCommand(command)
+                        self.emit(SIGNAL("CommandSent(PyQt_PyObject)"), command)
                     except:
                         self.commandQueue = []
                         self.commandQueue.append('M0')
                         self.emit(SIGNAL("CommandFailed(PyQt_PyObject)"), command)
-                        print 'Command failed: ', command
+#                        print 'Command failed: ', command
                 logger.debug('tick: before final updateStatus')
                 self.updateStatus()
         if not status == self.status:   #I don't know why, but != doesn't work
@@ -302,7 +307,7 @@ class grblSerial(QObject):
             else:
                 command = 'N' + str(lineNumber) + command
         self.commandQueue.append(command)
-        print 'appending command: ', command
+#        print 'appending command: ', command
 
     def close(self):
         self.ser.close()

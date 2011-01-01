@@ -34,7 +34,7 @@ logger = logging.getLogger('grblserial')
 
 __version__ = "0.1.0"
 
-(GE_EMPTY, GE_LOADING, GE_STOPPED, GE_RUNNING, GE_SINGLESTEP) = range(5) 
+(GE_EMPTY, GE_LOADING, GE_RUNNING, GE_STOPPING, GE_STOPPED, GE_SINGLESTEP) = range(6)
 (MODE_JOG, MODE_MANUAL, MODE_AUTO) = range(3)
 
 #***********************************************************************************
@@ -49,6 +49,8 @@ class MainWindow(QMainWindow):
         self.filename = 'gcode files/cncweb.txt'
         self.play = False
         self.machineRunning = True
+        self.moveMode = None
+        self.latestLineSent = 0
 
         self.preferences = preferences.prefsClass()
 
@@ -81,6 +83,7 @@ class MainWindow(QMainWindow):
 
         self.grbl = grblserial.grblSerial()
         self.connect(self.grbl, SIGNAL('statusChanged'), self.updateStatus)
+        self.connect(self.grbl, SIGNAL("CommandSent(PyQt_PyObject)"),  self.commandSent)
         self.connect(self.grbl, SIGNAL("CommandFailed(PyQt_PyObject)"), self.commandFailed)
 
         self.timerInterval = 200
@@ -115,14 +118,11 @@ class MainWindow(QMainWindow):
         self.controlLayout.addSpacing(200)
         self.Tabs.insertTab(0, self.controlPage, "Jog (F4)")
 
-        font = QFont("Courier", 14)
-        font.setFixedPitch(True)
 
     #Bottom area that contains the text file:
         self.editPage = QWidget()
         self.editLayout = QVBoxLayout(self.editPage)
         self.editor = gcodeEdit()
-        self.editor.setFont(font)
         self.editLayout.addWidget(self.editor)
         editToolbar = QToolBar()
         self.editLayout.addWidget(editToolbar)
@@ -311,19 +311,15 @@ class MainWindow(QMainWindow):
             
     def goPlay(self):
         cursorLine = self.editor.getActiveLine()
+        print 'Current row: ', cursorLine
+
         self.editor.setState(GE_RUNNING)
         logger.debug('About to start goPlay()()()()()()()()()()()()()()()()()')
         self.play = True
         self.runPlayPause.setIcon(QIcon('images/media-playback-pause-2.png'))
-        block = self.editor.document().begin()
-        lineNumber = 1
-        while block.isValid(): 
-            if lineNumber >= cursorLine:
-                self.initiateMove('AUTO', str(block.text()), lineNumber = lineNumber)
 
-#                self.grbl.queueCommand(str(block.text()), lineNumber=lineNumber)
-            block = block.next()   
-            lineNumber += 1
+        for lineNumber, block in self.editor.lines(cursorLine):
+            self.initiateMove('AUTO', block, lineNumber = lineNumber)
         logger.debug('Leaving goPlay()()()()()()()()()()()()()()()()()()()()')
             
         
@@ -333,31 +329,67 @@ class MainWindow(QMainWindow):
         self.emergencyStop() 
         self.runPlayPause.setIcon(QIcon('images/media-playback-start-2.png'))
 
-    def initiateMove(self, source, command, lineNumber=-1):
-        print 'initiateMove, Command: ', command,
-        print 'lineNumber: ', lineNumber
-        self.grbl.queueCommand(command, lineNumber=lineNumber)
+    def lineNumberFromCommand(self, command):
+        '''Helper that gets line number from a command string'''
+        if command[0] == 'N':
+            i = 1
+            while command[i].isdigit():
+                i += 1
+            return int(command[1:i])
+        else:
+            return -1
+
+    def commandSent(self, command):
+        '''
+        Called when a command is acknowledged by grbl
+        '''
+        lineNumber = self.lineNumberFromCommand(command)
+        if lineNumber>0:
+            self.editor.markSent(lineNumber)
+        
 
     def commandFailed(self, command):
-        '''Called when a command generates an error
+        '''
+        Called when a command generates an error
         when sent to grbl. The error is in a particular
         line
         '''
+        if self.moveMode == 'AUTO':
+            self.editor.setState(GE_STOPPING)
+            self.play = False;
+            self.runPlayPause.setIcon(QIcon('images/media-playback-start-2.png'))
+
+        lineNumber = self.lineNumberFromCommand(command)
+        if lineNumber>0:
+            self.editor.markError(lineNumber)
+
         QMessageBox.critical(self,
                          "Error in gcode",
                          "Error in line: " + str(command),
                          )
+
+
+
+    def initiateMove(self, source, command, lineNumber=-1):
+#        print 'initiateMove, Command: ', command,
+#        print 'lineNumber: ', lineNumber
+        self.moveMode = source
+        self.grbl.queueCommand(command, lineNumber=lineNumber)
 
     def updateStatus(self, status):
         '''Called when grbl returns a change in status, typically
         a change in position, but includes a change in line number,
         buffer ready or machine running
         '''
-
 #        print 'In updateStatus in main, line: ', status.lineNumber
         self.gcViewer.setPosition(status)
-        print 'updateStatus, activeline: ', status.lineNumber
         self.editor.setActiveLine(status.lineNumber)
+        if status.lineNumber>self.latestLineSent:
+            for i in range(self.latestLineSent, status.lineNumber):
+                self.editor.markDone(i+1)
+            self.latestLineSent = status.lineNumber
+
+
         if self.machineRunning!=status.machineRunning:
             self.machineRunning=status.machineRunning
             if status.machineRunning:
@@ -527,28 +559,13 @@ class MainWindow(QMainWindow):
 #            self.statusBar().showMessage("Loading file")
             
 
-            fh = QFile(self.filename)
-            if not fh.open(QIODevice.ReadOnly):
-                raise IOError, unicode(fh.errorString())
-            stream = QTextStream(fh)
-            stream.setCodec("UTF-8")
-            self.editor.clear()
-            self.editor.setLineWrapMode(QTextEdit.NoWrap)
-            self.editor.document().setModified(False)
+#            fh = QFile(self.filename)
+#            if not fh.open(QIODevice.ReadOnly):
+#                raise IOError, unicode(fh.errorString())
+#            stream = QTextStream(fh)
+#            stream.setCodec("UTF-8")
+            self.editor.loadNewFile(self.filename)#stream)
 
-            print 'load: to start reading file'
-            # using infile to temporarily store g-code for submission
-            # to gcViewer. 
-            file_contents = []
-            while not stream.atEnd():
-                a = stream.readLine()
-                self.editor.append(a)
-                file_contents.append(a)
-            self.editor.cursorToLine(0)
-            self.editor.setState(GE_STOPPED)
-            
-#            self.statusBar().showMessage("Parsing file")
-            print 'load: about to send to parser'
             parser = gcParser()
             parser.load(self.filename)
             center, radius = parser.getGLLimits(parser.gl_list)
@@ -556,7 +573,7 @@ class MainWindow(QMainWindow):
             self.gcViewer.setLimits(center, radius)
             self.gcViewer.setTopView()
 
-            print 'load: done'
+#            print 'load: done'
 
         except (IOError, OSError), e:
             exception = e
