@@ -28,7 +28,6 @@ from gcparser import gcParser
 from joginterface import JogInterfaceWidget
 import ogl_window
 import preferences
-import qrc_resources
 
 logger = logging.getLogger('grblserial')
 
